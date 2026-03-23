@@ -43,17 +43,17 @@ pip install "qontos-sim[all] @ git+https://github.com/qontos/qontos-sim.git@v0.1
 
 This automatically installs the pinned `qontos` SDK dependency (`v0.2.0`).
 
-### Optional dependency groups
+### Optional dependency groups (pre-release)
 
 ```bash
-pip install "qontos-sim[sim]"      # Local + noisy simulators (requires qiskit-aer)
-pip install "qontos-sim[twin]"     # Digital twin models
-pip install "qontos-sim[tensor]"   # Tensor-network engine (requires numpy)
-pip install "qontos-sim[all]"      # Everything
-pip install "qontos-sim[dev]"      # Development tools
+pip install "qontos-sim[sim] @ git+https://github.com/qontos/qontos-sim.git@v0.1.0"
+pip install "qontos-sim[twin] @ git+https://github.com/qontos/qontos-sim.git@v0.1.0"
+pip install "qontos-sim[tensor] @ git+https://github.com/qontos/qontos-sim.git@v0.1.0"
+pip install "qontos-sim[all] @ git+https://github.com/qontos/qontos-sim.git@v0.1.0"
+pip install "qontos-sim[dev] @ git+https://github.com/qontos/qontos-sim.git@v0.1.0"
 ```
 
-> **Note**: Once packages are published to PyPI, installation will simplify to `pip install qontos-sim`.
+> **Note**: Once published to PyPI, these simplify to `pip install qontos-sim[sim]`, etc.
 
 Requires Python 3.10+.
 

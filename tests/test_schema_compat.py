@@ -7,13 +7,12 @@ fixture builders don't provide.
 QGH-3303: Initial schema drift prevention
 QGH-3402: Extended to cover noisy simulator tests
 """
-import ast
-import inspect
 import pathlib
+
 import pytest
 from pydantic import ValidationError
 
-from qontos.models.circuit import CircuitIR, InputFormat, GateOperation
+from qontos.models.circuit import CircuitIR, InputFormat
 
 
 class TestCircuitIRSchemaCompat:
