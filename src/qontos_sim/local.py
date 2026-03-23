@@ -6,8 +6,8 @@ Executor stays thin: no partitioning, scheduling, or aggregation logic.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import time
-import uuid
 import logging
 from typing import Any
 
@@ -16,23 +16,27 @@ from qiskit_aer import AerSimulator
 
 from qontos.models.circuit import CircuitIR
 from qontos.models.result import PartitionResult
-from qontos.models.executor_contract import ExecutorContract, ValidationResult, register_executor
 from qontos_sim.normalize import aer_result_to_partition_result
 
 logger = logging.getLogger(__name__)
 
 
-@register_executor("local_simulator")
-class LocalSimulatorExecutor(ExecutorContract):
+@dataclass
+class ValidationResult:
+    """Minimal validation response returned by the simulator executors."""
+
+    valid: bool
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+class LocalSimulatorExecutor:
     """Executes a CircuitIR on the Qiskit Aer statevector/qasm simulator."""
 
     def __init__(self, backend_name: str = "aer_simulator") -> None:
         self._backend = AerSimulator()
         self._backend_name = backend_name
 
-    # ------------------------------------------------------------------
-    # ExecutorContract properties
-    # ------------------------------------------------------------------
     @property
     def provider_name(self) -> str:
         return "local_simulator"
@@ -41,9 +45,6 @@ class LocalSimulatorExecutor(ExecutorContract):
     def is_synchronous(self) -> bool:
         return True
 
-    # ------------------------------------------------------------------
-    # ExecutorContract methods
-    # ------------------------------------------------------------------
     def validate(self, circuit_ir: CircuitIR, shots: int = 1024) -> ValidationResult:
         """Pre-flight validation for the local simulator."""
         errors: list[str] = []
@@ -114,8 +115,6 @@ class LocalSimulatorExecutor(ExecutorContract):
 
     def normalize(self, raw_result: Any) -> PartitionResult:
         """Delegate to the normalize module."""
-        from qontos_sim.normalize import aer_result_to_partition_result
-
         if isinstance(raw_result, PartitionResult):
             return raw_result
         # Attempt to pass through as kwargs if it's a dict

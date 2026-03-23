@@ -34,24 +34,30 @@ It provides three simulation backends:
 ## Installation
 
 ```bash
-pip install qontos-sim
+pip install "git+https://github.com/qontos/qontos.git@main"
+pip install "git+https://github.com/qontos/qontos-sim.git@main"
 ```
 
-For the full tensor network engine:
+For local and noisy Aer execution:
 
 ```bash
-pip install "qontos-sim[tensor]"
+pip install qiskit qiskit-aer
 ```
 
 Requires Python 3.10+.
+
+The simulator package is designed to work alongside the flagship [`qontos`](https://github.com/qontos/qontos) SDK because it consumes the public `CircuitIR` and `PartitionResult` schemas from that repo.
 
 ## Quick Start
 
 ### Local Simulator
 
 ```python
+from qontos.circuit import CircuitNormalizer
 from qontos_sim import LocalSimulatorExecutor
 
+normalizer = CircuitNormalizer()
+circuit_ir = normalizer.normalize(input_type="openqasm", source=qasm_source)
 executor = LocalSimulatorExecutor()
 result = executor.submit(circuit_ir, shots=8192)
 print(result.counts)
@@ -60,12 +66,12 @@ print(result.counts)
 ### Noisy Simulation
 
 ```python
+from qontos.circuit import CircuitNormalizer
 from qontos_sim import NoisySimulatorExecutor
 
-executor = NoisySimulatorExecutor(
-    depolarizing_rate=0.001,
-    readout_error=0.01,
-)
+normalizer = CircuitNormalizer()
+circuit_ir = normalizer.normalize(input_type="openqasm", source=qasm_source)
+executor = NoisySimulatorExecutor()
 result = executor.submit(circuit_ir, shots=8192)
 ```
 
@@ -75,24 +81,30 @@ result = executor.submit(circuit_ir, shots=8192)
 from qontos_twin import ModularSimulator, SystemConfig
 
 config = SystemConfig(
-    module_count=4,
-    qubits_per_module=2000,
+    num_modules=4,
     transduction_efficiency=0.15,
 )
 sim = ModularSimulator(config)
-workload = sim.simulate_workload(circuit_ir)
-print(f"Estimated fidelity: {workload.fidelity:.4f}")
-print(f"Bell pairs required: {workload.bell_pairs}")
+workload = sim.simulate_workload(circuit_depth=250)
+print(f"Estimated fidelity: {workload.estimated_fidelity:.4f}")
+print(f"Bell pairs required: {workload.bell_pairs_needed}")
 ```
 
 ### Tensor Network Simulation
 
 ```python
-from qontos_tensor import MatrixProductState, TNSimulator
+from qontos_tensor import GateInstruction, TNSimulator
 
-# Simulate 100+ qubit circuits with bounded entanglement
-sim = TNSimulator(max_bond_dimension=256)
-result = sim.run(circuit_ir)
+# Simulate bounded-entanglement circuits with an MPS backend
+sim = TNSimulator(n_qubits=2, chi_max=256)
+result = sim.run(
+    [
+        GateInstruction(name="H", qubits=[0]),
+        GateInstruction(name="CNOT", qubits=[0, 1]),
+    ],
+    n_shots=1024,
+)
+print(result.measurements[:5])
 ```
 
 ## Simulators

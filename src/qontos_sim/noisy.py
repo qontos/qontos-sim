@@ -54,9 +54,27 @@ class NoisySimulatorExecutor:
         self._backend_name = backend_name
         self._config = cfg
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+    @property
+    def provider_name(self) -> str:
+        return "simulator_noisy"
+
+    @property
+    def is_synchronous(self) -> bool:
+        return True
+
+    def submit(
+        self,
+        circuit_ir: CircuitIR,
+        shots: int = 1024,
+        **kwargs,
+    ) -> PartitionResult:
+        """Compatibility wrapper matching the local simulator API."""
+        return self.execute(
+            circuit_ir,
+            shots=shots,
+            optimization_level=kwargs.get("optimization_level", 1),
+        )
+
     def execute(
         self,
         circuit_ir: CircuitIR,

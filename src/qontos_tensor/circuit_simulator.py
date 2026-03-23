@@ -294,6 +294,15 @@ class TNSimulator:
             gate_count=len(gates),
         )
 
+    def run(
+        self,
+        gates: List[GateInstruction],
+        n_shots: int = 1024,
+        initial_state: Optional[MatrixProductState] = None,
+    ) -> SimulationResult:
+        """Alias for simulate(), matching common SDK expectations."""
+        return self.simulate(gates=gates, n_shots=n_shots, initial_state=initial_state)
+
     def _apply_three_qubit_gate(
         self,
         mps: MatrixProductState,

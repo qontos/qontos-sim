@@ -58,6 +58,24 @@ class SimulationResult:
     degradation_band: str  # STRETCH, TARGET, FALLBACK, MINIMUM
 
 
+class ModularSimulator:
+    """Lightweight wrapper around the digital twin workload estimators."""
+
+    def __init__(self, config: SystemConfig) -> None:
+        self.config = config
+
+    def simulate_workload(
+        self,
+        circuit_depth: int = 100,
+        two_qubit_gate_ratio: float = 0.4,
+    ) -> SimulationResult:
+        return simulate_workload(
+            self.config,
+            circuit_depth=circuit_depth,
+            two_qubit_gate_ratio=two_qubit_gate_ratio,
+        )
+
+
 # Degradation bands from whitepaper (page 9)
 DEGRADATION_BANDS = [
     (0.25, "STRETCH",  "~5 kHz", "~500 ops/sec", "Full algorithm library"),
