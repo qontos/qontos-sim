@@ -1,8 +1,11 @@
-"""QGH-3010: Comprehensive tests for NoisySimulatorExecutor.
+"""Tests for NoisySimulatorExecutor.
 
 Tests cover instantiation with noise model, degraded fidelity vs noiseless,
 configurable depolarizing error rate, circuit-size noise scaling, readout
 error modelling, zero-error equivalence, and PartitionResult schema.
+
+NOTE: All CircuitIR fixtures use the shared builders in circuit_fixtures.py.
+      Do NOT define local _make_circuit_ir() helpers — see QGH-3401/3402.
 """
 
 from __future__ import annotations
@@ -10,37 +13,14 @@ from __future__ import annotations
 import pytest
 import numpy as np
 
+from qontos.models.circuit import CircuitIR
 from qontos_sim.noisy import NoisySimulatorExecutor, _DEFAULT_NOISE_CONFIG
+from tests.circuit_fixtures import make_qasm_circuit, BELL_QASM, GHZ3_QASM
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers — GHZ generator for arbitrary sizes (uses shared builder)
 # ---------------------------------------------------------------------------
-
-def _make_circuit_ir(qasm: str, num_qubits: int = 2, num_clbits: int | None = None):
-    from qontos.models.circuit import CircuitIR
-
-    return CircuitIR(
-        qasm_string=qasm,
-        num_qubits=num_qubits,
-        num_clbits=num_clbits or num_qubits,
-        gates=[],
-        circuit_hash="test",
-    )
-
-
-def _bell_qasm() -> str:
-    return (
-        "OPENQASM 2.0;\n"
-        'include "qelib1.inc";\n'
-        "qreg q[2];\n"
-        "creg c[2];\n"
-        "h q[0];\n"
-        "cx q[0],q[1];\n"
-        "measure q[0] -> c[0];\n"
-        "measure q[1] -> c[1];\n"
-    )
-
 
 def _ghz_qasm(n: int) -> str:
     lines = [
@@ -55,6 +35,16 @@ def _ghz_qasm(n: int) -> str:
     for i in range(n):
         lines.append(f"measure q[{i}] -> c[{i}];")
     return "\n".join(lines) + "\n"
+
+
+def _bell_ir() -> CircuitIR:
+    """Build a valid Bell-state CircuitIR via the shared fixture builder."""
+    return make_qasm_circuit(BELL_QASM, num_qubits=2)
+
+
+def _ghz_ir(n: int) -> CircuitIR:
+    """Build a valid GHZ CircuitIR via the shared fixture builder."""
+    return make_qasm_circuit(_ghz_qasm(n), num_qubits=n, depth=n, gate_count=n)
 
 
 # ===================================================================
@@ -97,7 +87,7 @@ class TestNoisyFidelity:
         """With default noise, some unexpected bitstrings should appear."""
         from qontos_sim.local import LocalSimulatorExecutor
 
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = _bell_ir()
         shots = 8192
 
         noiseless = LocalSimulatorExecutor()
@@ -118,7 +108,7 @@ class TestNoisyFidelity:
 
     def test_high_noise_degrades_more(self):
         """Higher error rates should produce more noise."""
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = _bell_ir()
         shots = 8192
 
         low_noise = NoisySimulatorExecutor(
@@ -150,7 +140,7 @@ class TestDepolarizingRate:
         """Error rates of 0 should behave like noiseless."""
         cfg = {"single_qubit_error": 0.0, "two_qubit_error": 0.0}
         executor = NoisySimulatorExecutor(noise_model_config=cfg)
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = _bell_ir()
         result = executor.execute(circuit_ir, shots=4096)
 
         # With zero depolarizing error (thermal still present but negligible
@@ -172,11 +162,11 @@ class TestNoiseCircuitScaling:
         executor = NoisySimulatorExecutor()
 
         # 2-qubit Bell
-        ir_small = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        ir_small = _bell_ir()
         r_small = executor.execute(ir_small, shots=shots)
 
         # 5-qubit GHZ (more gates => more noise)
-        ir_large = _make_circuit_ir(_ghz_qasm(5), num_qubits=5, num_clbits=5)
+        ir_large = _ghz_ir(5)
         r_large = executor.execute(ir_large, shots=shots)
 
         def dominant_frac(counts, ideal_keys):
@@ -199,7 +189,7 @@ class TestReadoutError:
 
     def test_noise_metadata_recorded(self):
         executor = NoisySimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = _bell_ir()
         result = executor.execute(circuit_ir, shots=100)
 
         # Noise config should be in metadata
@@ -224,7 +214,7 @@ class TestZeroErrorNoiseless:
             "t2_us": 1e10,
         }
         executor = NoisySimulatorExecutor(noise_model_config=cfg)
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = _bell_ir()
         result = executor.execute(circuit_ir, shots=4096)
 
         # Should be essentially noiseless
@@ -240,7 +230,7 @@ class TestPartitionResultSchema:
 
     def test_result_has_required_fields(self):
         executor = NoisySimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = _bell_ir()
         result = executor.execute(circuit_ir, shots=512)
 
         assert result.partition_id is not None
@@ -252,6 +242,28 @@ class TestPartitionResultSchema:
 
     def test_submit_alias(self):
         executor = NoisySimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = _bell_ir()
         result = executor.submit(circuit_ir, shots=256)
         assert result.shots_completed == 256
+
+
+# ===================================================================
+# Schema validation — QGH-3401
+# ===================================================================
+
+class TestNoisyFixtureSchema:
+    """Verify all noisy test fixtures produce valid CircuitIR objects."""
+
+    def test_bell_fixture_is_real_circuit_ir(self):
+        ir = _bell_ir()
+        assert isinstance(ir, CircuitIR)
+        assert ir.depth > 0
+        assert ir.gate_count >= 0
+        assert ir.source_type is not None
+
+    def test_ghz_fixture_is_real_circuit_ir(self):
+        ir = _ghz_ir(5)
+        assert isinstance(ir, CircuitIR)
+        assert ir.num_qubits == 5
+        assert ir.depth > 0
+        assert ir.source_type is not None

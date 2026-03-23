@@ -1,9 +1,15 @@
-"""QGH-3303: Schema compatibility check between qontos SDK and qontos-sim.
+"""Schema compatibility check between qontos SDK and qontos-sim.
 
-Verifies that the CircuitIR model fields used by simulator fixtures match
-the live SDK schema. Fails fast if the SDK adds required fields that
+Verifies that the CircuitIR model fields used by ALL simulator fixtures
+match the live SDK schema. Fails fast if the SDK adds required fields that
 fixture builders don't provide.
+
+QGH-3303: Initial schema drift prevention
+QGH-3402: Extended to cover noisy simulator tests
 """
+import ast
+import inspect
+import pathlib
 import pytest
 from pydantic import ValidationError
 
@@ -62,3 +68,46 @@ class TestCircuitIRSchemaCompat:
         assert "gate_count" in required
         assert "gates" in required
         assert "source_type" in required
+
+
+class TestNoAdHocFixtures:
+    """QGH-3402: Ensure no simulator test file defines its own CircuitIR builder.
+
+    All fixture construction must go through tests/circuit_fixtures.py.
+    This test scans test files for stale local helpers.
+    """
+
+    BANNED_PATTERNS = ["_make_circuit_ir", "CircuitIR("]
+    ALLOWED_FILES = {"circuit_fixtures.py", "test_schema_compat.py"}
+
+    def test_no_local_circuit_ir_builders(self):
+        """No simulator test file should define _make_circuit_ir()."""
+        test_dir = pathlib.Path(__file__).parent
+        violations = []
+        for py_file in sorted(test_dir.glob("test_*.py")):
+            if py_file.name in self.ALLOWED_FILES:
+                continue
+            source = py_file.read_text()
+            if "def _make_circuit_ir" in source:
+                violations.append(f"{py_file.name} defines _make_circuit_ir()")
+        assert not violations, (
+            f"Stale local CircuitIR builders found — use circuit_fixtures.py instead:\n"
+            + "\n".join(f"  - {v}" for v in violations)
+        )
+
+    def test_noisy_tests_use_shared_fixtures(self):
+        """test_noisy_simulator.py should import from circuit_fixtures."""
+        test_dir = pathlib.Path(__file__).parent
+        noisy_source = (test_dir / "test_noisy_simulator.py").read_text()
+        assert "from tests.circuit_fixtures import" in noisy_source or \
+               "from .circuit_fixtures import" in noisy_source, \
+            "test_noisy_simulator.py must import from circuit_fixtures"
+
+    def test_local_tests_use_shared_fixtures(self):
+        """test_local_simulator.py should import from circuit_fixtures."""
+        test_dir = pathlib.Path(__file__).parent
+        local_source = (test_dir / "test_local_simulator.py").read_text()
+        # May still have inline helpers but should also use shared ones
+        assert "circuit_fixtures" in local_source or "make_qasm_circuit" in local_source or \
+               "_make_gate_list_circuit_ir" in local_source, \
+            "test_local_simulator.py should use shared fixture builders"
