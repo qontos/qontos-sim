@@ -33,16 +33,27 @@ It provides three simulation backends:
 
 ## Installation
 
-```bash
-pip install "git+https://github.com/qontos/qontos.git@main"
-pip install "git+https://github.com/qontos/qontos-sim.git@main"
-```
+### Pre-release (current)
 
-For local and noisy Aer execution:
+The QONTOS packages are not yet published to PyPI. Install from GitHub:
 
 ```bash
-pip install qiskit qiskit-aer
+pip install "qontos-sim[all] @ git+https://github.com/qontos/qontos-sim.git@main"
 ```
+
+This automatically installs the `qontos` SDK dependency.
+
+### Optional dependency groups
+
+```bash
+pip install "qontos-sim[sim]"      # Local + noisy simulators (requires qiskit-aer)
+pip install "qontos-sim[twin]"     # Digital twin models
+pip install "qontos-sim[tensor]"   # Tensor-network engine (requires numpy)
+pip install "qontos-sim[all]"      # Everything
+pip install "qontos-sim[dev]"      # Development tools
+```
+
+> **Note**: Once packages are published to PyPI, installation will simplify to `pip install qontos-sim`.
 
 Requires Python 3.10+.
 
