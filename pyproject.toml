@@ -9,7 +9,7 @@ description = "Quantum simulators and modular digital twin for QONTOS"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
-authors = [{name = "Ramesh Tamilselvan", email = "research@zhyra.xyz"}]
+authors = [{name = "Ramesh Tamilselvan", email = "rameshtamilselvan@gmail.com"}]
 keywords = ["quantum", "simulator", "digital-twin", "tensor-network", "qiskit"]
 classifiers = [
     "Development Status :: 3 - Alpha",
