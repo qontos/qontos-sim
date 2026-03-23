@@ -144,12 +144,15 @@ Pure NumPy implementation — zero external tensor network dependencies.
 - **DMRG** — Variational ground-state search for 100+ site systems
 - **Circuit simulation** — Full circuit evolution via MPS
 
-## Related Packages
+## Related Repositories
 
-| Package | Repository | Description |
-|---|---|---|
-| `qontos` | [qontos/qontos](https://github.com/qontos/qontos) | Core orchestration SDK |
-| `qontos-bench` | [qontos/qontos-benchmarks](https://github.com/qontos/qontos-benchmarks) | Benchmark framework |
+| Repository | Description |
+|------------|-------------|
+| [qontos](https://github.com/qontos/qontos) | Flagship Python SDK |
+| [qontos-sim](https://github.com/qontos/qontos-sim) | Simulators and digital twin |
+| [qontos-examples](https://github.com/qontos/qontos-examples) | Tutorials and examples |
+| [qontos-benchmarks](https://github.com/qontos/qontos-benchmarks) | Benchmark evidence |
+| [qontos-research](https://github.com/qontos/qontos-research) | Research papers and roadmap |
 
 ## License
 

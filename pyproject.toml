@@ -24,15 +24,26 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-aer = ["qiskit>=1.0", "qiskit-aer>=0.13"]
+sim = ["qiskit>=1.0", "qiskit-aer>=0.13"]
+twin = []  # pure Python, no extra deps
 tensor = []  # pure numpy, no extra deps
-dev = ["pytest>=8.0", "pytest-cov>=5.0", "mypy>=1.8", "ruff>=0.4", "build>=1.0", "qiskit>=1.0", "qiskit-aer>=0.13"]
-all = ["qontos-sim[aer,tensor]"]
+all = ["qontos-sim[sim,twin,tensor]"]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "mypy>=1.8",
+    "ruff>=0.4",
+    "build>=1.0",
+    "qiskit>=1.0",
+    "qiskit-aer>=0.13",
+]
 
 [project.urls]
 Homepage = "https://github.com/qontos/qontos-sim"
 Repository = "https://github.com/qontos/qontos-sim"
 Issues = "https://github.com/qontos/qontos-sim/issues"
+Documentation = "https://github.com/qontos/qontos-sim/tree/main/docs"
+Changelog = "https://github.com/qontos/qontos-sim/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]

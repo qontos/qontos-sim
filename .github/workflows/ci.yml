@@ -55,8 +55,12 @@ jobs:
           python-version: "3.12"
       - name: Install build tool
         run: pip install build
-      - name: Build package
+      - name: Build sdist and wheel
         run: python -m build
+      - name: Verify wheel was created
+        run: |
+          ls dist/*.whl
+          ls dist/*.tar.gz
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

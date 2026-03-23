@@ -1,4 +1,12 @@
-"""QONTOS Simulators — local quantum simulation backends."""
+"""QONTOS Simulators — local quantum simulation backends.
+
+Public API
+----------
+LocalSimulatorExecutor : Noiseless Aer-backed circuit executor.
+NoisySimulatorExecutor : Noisy Aer-backed circuit executor.
+ValidationResult       : Pre-flight validation dataclass.
+aer_result_to_partition_result : Normalize raw Aer counts to PartitionResult.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +17,7 @@ __all__ = [
     "LocalSimulatorExecutor",
     "NoisySimulatorExecutor",
     "ValidationResult",
+    "aer_result_to_partition_result",
 ]
 
 
@@ -25,4 +34,8 @@ def __getattr__(name: str):
         from qontos_sim.noisy import NoisySimulatorExecutor
 
         return NoisySimulatorExecutor
+    if name == "aer_result_to_partition_result":
+        from qontos_sim.normalize import aer_result_to_partition_result
+
+        return aer_result_to_partition_result
     raise AttributeError(f"module 'qontos_sim' has no attribute {name}")
