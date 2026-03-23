@@ -35,13 +35,13 @@ It provides three simulation backends:
 
 ### Pre-release (current)
 
-The QONTOS packages are not yet published to PyPI. Install from GitHub:
+The QONTOS packages are not yet published to PyPI. Install from pinned release tags:
 
 ```bash
-pip install "qontos-sim[all] @ git+https://github.com/qontos/qontos-sim.git@main"
+pip install "qontos-sim[all] @ git+https://github.com/qontos/qontos-sim.git@v0.1.0"
 ```
 
-This automatically installs the `qontos` SDK dependency.
+This automatically installs the pinned `qontos` SDK dependency (`v0.2.0`).
 
 ### Optional dependency groups
 

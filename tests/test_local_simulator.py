@@ -1,8 +1,11 @@
-"""QGH-3010: Comprehensive tests for LocalSimulatorExecutor.
+"""Comprehensive tests for LocalSimulatorExecutor.
 
 Tests cover instantiation, Bell state execution, GHZ circuits, configurable
 shots, result normalization, validation, error handling, deterministic seeding,
 large circuits, and empty circuits.
+
+NOTE: All CircuitIR fixtures use the shared builders in circuit_fixtures.py.
+      Do NOT define local builders — see QGH-3501.
 """
 
 from __future__ import annotations
@@ -10,96 +13,30 @@ from __future__ import annotations
 import pytest
 import numpy as np
 
+from qontos.models.circuit import CircuitIR, InputFormat
 from qontos_sim.local import LocalSimulatorExecutor, ValidationResult, _circuit_ir_to_qiskit
 from qontos_sim.normalize import aer_result_to_partition_result
+from tests.circuit_fixtures import make_qasm_circuit, make_gate_list_circuit, BELL_QASM, GHZ3_QASM
+
 
 # ---------------------------------------------------------------------------
-# Helpers — lightweight CircuitIR stand-ins
+# QASM helpers for parameterized sizes (delegates to shared builder)
 # ---------------------------------------------------------------------------
 
-def _make_circuit_ir(qasm: str, num_qubits: int = 2, num_clbits: int | None = None):
-    """Build a valid CircuitIR from a QASM string."""
-    from qontos.models.circuit import CircuitIR, InputFormat
-
-    return CircuitIR(
-        qasm_string=qasm,
-        num_qubits=num_qubits,
-        num_clbits=num_clbits or num_qubits,
-        depth=10,  # Approximate; exact value not critical for simulation
-        gate_count=num_qubits * 2,  # Approximate
-        gates=[],
-        source_type=InputFormat.OPENQASM,
-        circuit_hash="test",
-    )
-
-
-def _make_gate_list_circuit_ir(
-    num_qubits: int,
-    gates: list,
-    *,
-    num_clbits: int | None = None,
-    include_measurements: bool = False,
-):
-    """Build a valid CircuitIR from a gate list (no QASM string)."""
-    from qontos.models.circuit import CircuitIR, GateOperation, InputFormat
-
-    gate_ops = []
-    for g in gates:
-        if isinstance(g, GateOperation):
-            gate_ops.append(g)
-        elif isinstance(g, tuple):
-            name, qubits = g[0], g[1]
-            params = g[2] if len(g) > 2 else []
-            gate_ops.append(GateOperation(name=name, qubits=qubits, params=params))
-
-    if include_measurements:
-        for i in range(num_qubits):
-            gate_ops.append(GateOperation(name="measure", qubits=[i], params=[]))
-
-    connectivity = []
-    for g in gate_ops:
-        if len(g.qubits) == 2:
-            connectivity.append((g.qubits[0], g.qubits[1]))
-
-    return CircuitIR(
-        qasm_string="",  # Force gate-list path
-        num_qubits=num_qubits,
-        num_clbits=num_clbits or num_qubits,
-        depth=len(gate_ops),
-        gate_count=len([g for g in gate_ops if g.name != "measure"]),
-        gates=gate_ops,
-        source_type=InputFormat.QISKIT,  # Gate-list input
-        qubit_connectivity=connectivity,
-        circuit_hash=f"test_gate_list_{num_qubits}q",
-    )
-
-
-def _bell_qasm() -> str:
-    return (
-        "OPENQASM 2.0;\n"
-        'include "qelib1.inc";\n'
-        "qreg q[2];\n"
-        "creg c[2];\n"
-        "h q[0];\n"
-        "cx q[0],q[1];\n"
-        "measure q[0] -> c[0];\n"
-        "measure q[1] -> c[1];\n"
-    )
-
-
-def _ghz3_qasm() -> str:
-    return (
-        "OPENQASM 2.0;\n"
-        'include "qelib1.inc";\n'
-        "qreg q[3];\n"
-        "creg c[3];\n"
-        "h q[0];\n"
-        "cx q[0],q[1];\n"
-        "cx q[1],q[2];\n"
-        "measure q[0] -> c[0];\n"
-        "measure q[1] -> c[1];\n"
-        "measure q[2] -> c[2];\n"
-    )
+def _ghz_qasm(n: int) -> str:
+    """Generate GHZ QASM for arbitrary qubit count."""
+    lines = [
+        "OPENQASM 2.0;",
+        'include "qelib1.inc";',
+        f"qreg q[{n}];",
+        f"creg c[{n}];",
+        "h q[0];",
+    ]
+    for i in range(n - 1):
+        lines.append(f"cx q[{i}],q[{i + 1}];")
+    for i in range(n):
+        lines.append(f"measure q[{i}] -> c[{i}];")
+    return "\n".join(lines) + "\n"
 
 
 # ===================================================================
@@ -141,7 +78,7 @@ class TestBellStateExecution:
 
     def test_bell_state_counts(self):
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = make_qasm_circuit(BELL_QASM, num_qubits=2)
         result = executor.execute(circuit_ir, shots=4096)
 
         counts = result.counts
@@ -159,7 +96,7 @@ class TestBellStateExecution:
 
     def test_bell_state_result_format(self):
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = make_qasm_circuit(BELL_QASM, num_qubits=2)
         result = executor.execute(circuit_ir, shots=1024)
 
         assert result.shots_completed == 1024
@@ -178,7 +115,7 @@ class TestGHZ3Execution:
 
     def test_ghz3_counts(self):
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_ghz3_qasm(), num_qubits=3, num_clbits=3)
+        circuit_ir = make_qasm_circuit(GHZ3_QASM, num_qubits=3)
         result = executor.execute(circuit_ir, shots=4096)
 
         counts = result.counts
@@ -201,7 +138,7 @@ class TestConfigurableShots:
     @pytest.mark.parametrize("shots", [1, 100, 2048])
     def test_shots_respected(self, shots):
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = make_qasm_circuit(BELL_QASM, num_qubits=2)
         result = executor.execute(circuit_ir, shots=shots)
         assert result.shots_completed == shots
         assert sum(result.counts.values()) == shots
@@ -218,7 +155,7 @@ class TestResultNormalization:
         from qontos.models.result import PartitionResult
 
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = make_qasm_circuit(BELL_QASM, num_qubits=2)
         original = executor.execute(circuit_ir, shots=100)
 
         # Passing a PartitionResult back should return it unchanged
@@ -229,7 +166,7 @@ class TestResultNormalization:
         from qontos.models.result import PartitionResult
 
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = make_qasm_circuit(BELL_QASM, num_qubits=2)
         original = executor.execute(circuit_ir, shots=100)
 
         as_dict = original.model_dump()
@@ -266,7 +203,7 @@ class TestValidation:
 
     def test_valid_circuit(self):
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = make_qasm_circuit(BELL_QASM, num_qubits=2)
         vr = executor.validate(circuit_ir, shots=1024)
         assert isinstance(vr, ValidationResult)
         assert vr.valid is True
@@ -274,14 +211,14 @@ class TestValidation:
 
     def test_rejects_zero_qubits(self):
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir("", num_qubits=0)
+        circuit_ir = make_qasm_circuit("", num_qubits=0, depth=0, gate_count=0)
         vr = executor.validate(circuit_ir, shots=1024)
         assert vr.valid is False
         assert any("at least 1 qubit" in e for e in vr.errors)
 
     def test_rejects_zero_shots(self):
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = make_qasm_circuit(BELL_QASM, num_qubits=2)
         vr = executor.validate(circuit_ir, shots=0)
         assert vr.valid is False
         assert any("shots" in e for e in vr.errors)
@@ -306,7 +243,7 @@ class TestValidation:
 
     def test_warns_large_circuit(self):
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=33)
+        circuit_ir = make_qasm_circuit(BELL_QASM, num_qubits=33)
         vr = executor.validate(circuit_ir, shots=1024)
         # Valid but with a warning
         assert len(vr.warnings) > 0
@@ -322,7 +259,7 @@ class TestMalformedQASM:
 
     def test_malformed_qasm_raises(self):
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir("NOT VALID QASM", num_qubits=2)
+        circuit_ir = make_qasm_circuit("NOT VALID QASM", num_qubits=2)
         with pytest.raises(Exception):
             executor.execute(circuit_ir, shots=100)
 
@@ -336,7 +273,7 @@ class TestDeterministicSeed:
 
     def test_fixed_seed_reproducibility(self):
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = make_qasm_circuit(BELL_QASM, num_qubits=2)
 
         # Aer supports seed_simulator via kwargs on the backend run
         # We run twice with the same backend and check statistical consistency
@@ -377,7 +314,7 @@ class TestLargeCircuit:
         qasm = "\n".join(lines) + "\n"
 
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir(qasm, num_qubits=n, num_clbits=n)
+        circuit_ir = make_qasm_circuit(qasm, num_qubits=n, depth=n, gate_count=n)
         result = executor.execute(circuit_ir, shots=512)
 
         assert result.shots_completed == 512
@@ -414,7 +351,7 @@ class TestEmptyCircuit:
     def test_submit_alias_matches_execute(self):
         """submit() and execute() should return equivalent results."""
         executor = LocalSimulatorExecutor()
-        circuit_ir = _make_circuit_ir(_bell_qasm(), num_qubits=2)
+        circuit_ir = make_qasm_circuit(BELL_QASM, num_qubits=2)
         r1 = executor.submit(circuit_ir, shots=1024)
         r2 = executor.execute(circuit_ir, shots=1024)
         assert r1.shots_completed == r2.shots_completed
@@ -430,7 +367,7 @@ class TestNonQASMPath:
 
     def test_bell_state_from_gate_list(self):
         """Bell circuit via gate list produces ~50/50 counts."""
-        circuit = _make_gate_list_circuit_ir(
+        circuit = make_gate_list_circuit(
             num_qubits=2,
             gates=[("h", [0]), ("cx", [0, 1])],
             include_measurements=True,
@@ -449,7 +386,7 @@ class TestNonQASMPath:
 
     def test_single_qubit_hadamard(self):
         """Single H gate produces superposition with both |0> and |1>."""
-        circuit = _make_gate_list_circuit_ir(
+        circuit = make_gate_list_circuit(
             num_qubits=1,
             gates=[("h", [0])],
         )
@@ -460,7 +397,7 @@ class TestNonQASMPath:
 
     def test_explicit_measurements_no_double(self):
         """Gate list with explicit measurements should NOT double-measure."""
-        circuit = _make_gate_list_circuit_ir(
+        circuit = make_gate_list_circuit(
             num_qubits=2,
             gates=[("h", [0]), ("cx", [0, 1])],
             include_measurements=True,
@@ -472,7 +409,7 @@ class TestNonQASMPath:
 
     def test_auto_measure_when_no_measurements(self):
         """Gate list without measurements should auto-add measure_all."""
-        circuit = _make_gate_list_circuit_ir(
+        circuit = make_gate_list_circuit(
             num_qubits=2,
             gates=[("h", [0]), ("cx", [0, 1])],
             include_measurements=False,
@@ -484,7 +421,7 @@ class TestNonQASMPath:
 
     def test_barrier_handling(self):
         """Barrier gates in the list are handled without error."""
-        circuit = _make_gate_list_circuit_ir(
+        circuit = make_gate_list_circuit(
             num_qubits=2,
             gates=[("h", [0]), ("barrier", [0, 1]), ("cx", [0, 1])],
         )
@@ -494,7 +431,7 @@ class TestNonQASMPath:
 
     def test_unknown_gate_warning(self):
         """Unknown gate name does not crash (may warn)."""
-        circuit = _make_gate_list_circuit_ir(
+        circuit = make_gate_list_circuit(
             num_qubits=2,
             gates=[("h", [0]), ("zzz_gate", [1])],
         )
@@ -510,7 +447,7 @@ class TestNonQASMPath:
 
     def test_parametric_gate_from_list(self):
         """RY(0.5) gate via gate list executes successfully."""
-        circuit = _make_gate_list_circuit_ir(
+        circuit = make_gate_list_circuit(
             num_qubits=1,
             gates=[("ry", [0], [0.5])],
         )
