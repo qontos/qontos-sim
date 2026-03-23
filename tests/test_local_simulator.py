@@ -369,3 +369,128 @@ class TestEmptyCircuit:
         r2 = executor.execute(circuit_ir, shots=1024)
         assert r1.shots_completed == r2.shots_completed
         assert set(r1.counts.keys()) == set(r2.counts.keys())
+
+
+# ===================================================================
+# QGH-3103: Non-QASM gate-list reconstruction path
+# ===================================================================
+
+class TestNonQASMPath:
+    """Tests for the gate-list fallback path when qasm_string is absent."""
+
+    def test_bell_state_from_gate_list(self):
+        """Bell circuit via gate list produces correct counts."""
+        from qontos.models.circuit import CircuitIR, GateOperation
+        from qontos_sim.local import LocalSimulatorExecutor
+
+        circuit = CircuitIR(
+            num_qubits=2,
+            num_clbits=2,
+            depth=2,
+            gate_count=2,
+            gates=[
+                GateOperation(name="h", qubits=[0], params=[]),
+                GateOperation(name="cx", qubits=[0, 1], params=[]),
+                GateOperation(name="measure", qubits=[0], params=[]),
+                GateOperation(name="measure", qubits=[1], params=[]),
+            ],
+            qubit_connectivity=[(0, 1)],
+            circuit_hash="test_gate_list_bell",
+            qasm_string="",  # Force gate-list path
+        )
+        executor = LocalSimulatorExecutor()
+        result = executor.submit(circuit, shots=4096)
+        assert "00" in result.counts or "11" in result.counts
+
+    def test_single_qubit_from_gate_list(self):
+        """Single H gate produces superposition."""
+        from qontos.models.circuit import CircuitIR, GateOperation
+        from qontos_sim.local import LocalSimulatorExecutor
+
+        circuit = CircuitIR(
+            num_qubits=1,
+            num_clbits=1,
+            depth=1,
+            gate_count=1,
+            gates=[
+                GateOperation(name="h", qubits=[0], params=[]),
+            ],
+            qubit_connectivity=[],
+            circuit_hash="test_gate_list_h",
+            qasm_string="",
+        )
+        executor = LocalSimulatorExecutor()
+        result = executor.submit(circuit, shots=4096)
+        # Should have both |0> and |1> states
+        assert len(result.counts) >= 2
+
+    def test_gate_list_with_explicit_measurements(self):
+        """Gate list with explicit measurements should NOT double-measure."""
+        from qontos.models.circuit import CircuitIR, GateOperation
+        from qontos_sim.local import LocalSimulatorExecutor
+
+        circuit = CircuitIR(
+            num_qubits=2,
+            num_clbits=2,
+            depth=3,
+            gate_count=4,
+            gates=[
+                GateOperation(name="h", qubits=[0], params=[]),
+                GateOperation(name="cx", qubits=[0, 1], params=[]),
+                GateOperation(name="measure", qubits=[0], params=[]),
+                GateOperation(name="measure", qubits=[1], params=[]),
+            ],
+            qubit_connectivity=[(0, 1)],
+            circuit_hash="test_explicit_measure",
+            qasm_string="",
+        )
+        executor = LocalSimulatorExecutor()
+        result = executor.submit(circuit, shots=1024)
+        # Should succeed without errors from double measurement
+        assert result.shots_completed == 1024
+
+    def test_gate_list_without_measurements_auto_adds(self):
+        """Gate list without measurements should auto-add measure_all."""
+        from qontos.models.circuit import CircuitIR, GateOperation
+        from qontos_sim.local import LocalSimulatorExecutor
+
+        circuit = CircuitIR(
+            num_qubits=2,
+            num_clbits=2,
+            depth=2,
+            gate_count=2,
+            gates=[
+                GateOperation(name="h", qubits=[0], params=[]),
+                GateOperation(name="cx", qubits=[0, 1], params=[]),
+            ],
+            qubit_connectivity=[(0, 1)],
+            circuit_hash="test_no_measure",
+            qasm_string="",
+        )
+        executor = LocalSimulatorExecutor()
+        result = executor.submit(circuit, shots=1024)
+        assert result.shots_completed == 1024
+        assert sum(result.counts.values()) == 1024
+
+    def test_barrier_in_gate_list(self):
+        """Barrier gates in the list are handled without error."""
+        from qontos.models.circuit import CircuitIR, GateOperation
+        from qontos_sim.local import LocalSimulatorExecutor
+
+        circuit = CircuitIR(
+            num_qubits=2,
+            num_clbits=2,
+            depth=3,
+            gate_count=3,
+            gates=[
+                GateOperation(name="h", qubits=[0], params=[]),
+                GateOperation(name="barrier", qubits=[0, 1], params=[]),
+                GateOperation(name="cx", qubits=[0, 1], params=[]),
+            ],
+            qubit_connectivity=[(0, 1)],
+            circuit_hash="test_barrier",
+            qasm_string="",
+        )
+        executor = LocalSimulatorExecutor()
+        result = executor.submit(circuit, shots=1024)
+        assert result.shots_completed == 1024

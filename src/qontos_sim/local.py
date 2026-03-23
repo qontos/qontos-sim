@@ -127,12 +127,57 @@ class LocalSimulatorExecutor:
 # Helpers
 # ------------------------------------------------------------------
 def _circuit_ir_to_qiskit(circuit_ir: CircuitIR) -> QuantumCircuit:
-    """Reconstruct a Qiskit QuantumCircuit from CircuitIR."""
+    """Reconstruct a Qiskit QuantumCircuit from CircuitIR.
+
+    Supports two paths:
+    1. If qasm_string is present, parse it directly (fast path).
+    2. Otherwise, rebuild from the gate list (fallback path).
+    """
     if circuit_ir.qasm_string:
         return QuantumCircuit.from_qasm_str(circuit_ir.qasm_string)
 
-    qc = QuantumCircuit(circuit_ir.num_qubits, circuit_ir.num_clbits or circuit_ir.num_qubits)
+    # Fallback: reconstruct from gate list
+    n_qubits = circuit_ir.num_qubits
+    n_clbits = circuit_ir.num_clbits if circuit_ir.num_clbits else n_qubits
+    qc = QuantumCircuit(n_qubits, n_clbits)
+
+    has_measurements = False
+    clbit_idx = 0  # Track next available classical bit for measurements
+
     for gate in circuit_ir.gates:
-        getattr(qc, gate.name)(*gate.params, *[qc.qubits[q] for q in gate.qubits])
-    qc.measure_all(add_bits=False) if circuit_ir.num_clbits else qc.measure_all()
+        name = gate.name.lower()
+        qubits = [qc.qubits[q] for q in gate.qubits]
+        params = gate.params if gate.params else []
+
+        if name == "measure":
+            # Measurement: map qubit to the next classical bit
+            if clbit_idx < n_clbits:
+                qc.measure(qubits[0], qc.clbits[clbit_idx])
+                clbit_idx += 1
+            else:
+                qc.measure(qubits[0], qc.clbits[gate.qubits[0] % n_clbits])
+            has_measurements = True
+        elif name == "barrier":
+            qc.barrier(*qubits) if qubits else qc.barrier()
+        elif name in ("id", "iden", "identity"):
+            qc.id(qubits[0])
+        elif name == "reset":
+            qc.reset(qubits[0])
+        else:
+            # Standard gate: use getattr to call the gate method
+            try:
+                gate_fn = getattr(qc, name)
+                gate_fn(*params, *qubits)
+            except AttributeError:
+                logger.warning("Unknown gate '%s' — skipping", name)
+
+    # Only add measurements if the gate list didn't include any
+    if not has_measurements:
+        if n_clbits == n_qubits:
+            qc.measure_all(add_bits=False)
+        else:
+            # Measure as many qubits as we have classical bits
+            for i in range(min(n_qubits, n_clbits)):
+                qc.measure(qc.qubits[i], qc.clbits[i])
+
     return qc
