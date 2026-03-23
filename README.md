@@ -1,27 +1,37 @@
 <div align="center">
+  <a href="https://github.com/qontos">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/qontos/.github/main/assets/qontos-logo-white.png">
+      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/qontos/.github/main/assets/qontos-logo.png">
+      <img src="https://raw.githubusercontent.com/qontos/.github/main/assets/qontos-logo.png" alt="QONTOS" width="260">
+    </picture>
+  </a>
 
-<img src="assets/qontos-logo.png" alt="QONTOS" width="400">
+  <h3>QONTOS Simulators</h3>
+  <p><strong>Simulation, digital twin, and tensor-network modeling for the QONTOS platform.</strong></p>
+  <p>Public validation and planning tools for the software stack today and the modular hardware roadmap ahead.</p>
 
-### Simulators
+  <p>
+    <img src="https://img.shields.io/badge/Visibility-Public-0f766e?style=flat-square" alt="Visibility: Public">
+    <img src="https://img.shields.io/badge/Track-Simulation-0b3b8f?style=flat-square" alt="Track: Simulation">
+    <img src="https://img.shields.io/badge/Status-Pre--release-c2410c?style=flat-square" alt="Status: Pre-release">
+    <a href="https://github.com/qontos/qontos-sim/actions"><img src="https://img.shields.io/github/actions/workflow/status/qontos/qontos-sim/ci.yml?branch=main&label=CI&logo=github&style=flat-square" alt="CI"></a>
+  </p>
 
-**Quantum simulators and modular digital twin for the QONTOS platform**
-
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python](https://img.shields.io/badge/Python-3.10+-yellow.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
-[![CI](https://img.shields.io/github/actions/workflow/status/qontos/qontos-sim/ci.yml?branch=main&label=CI&logo=github)](https://github.com/qontos/qontos-sim/actions)
-
-[Installation](#installation) &middot;
-[Quick Start](#quick-start) &middot;
-[Simulators](#simulators) &middot;
-[Digital Twin](#digital-twin) &middot;
-[Tensor Network Engine](#tensor-network-engine) &middot;
-[Related Packages](#related-packages)
-
+  <p>
+    <a href="#overview">Overview</a> &middot;
+    <a href="#installation">Installation</a> &middot;
+    <a href="#quick-start">Quick Start</a> &middot;
+    <a href="#simulators">Simulators</a> &middot;
+    <a href="#digital-twin">Digital Twin</a> &middot;
+    <a href="#tensor-network-engine">Tensor Engine</a> &middot;
+    <a href="#related-packages">Related Packages</a>
+  </p>
 </div>
 
 ---
 
-## What is this?
+## Overview
 
 QONTOS Simulators provides the simulation and digital-twin layer for the QONTOS platform. It includes local simulators, noisy simulation, modular architecture models, and tensor-network tools used for validation, planning, and large-scale system studies. This repository supports both present-day software workflows and future native QONTOS hardware design work.
 
