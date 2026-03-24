@@ -22,6 +22,7 @@
     <a href="#overview">Overview</a> &middot;
     <a href="#installation">Installation</a> &middot;
     <a href="#quick-start">Quick Start</a> &middot;
+    <a href="docs/index.md">Docs Hub</a> &middot;
     <a href="#simulators">Simulators</a> &middot;
     <a href="#digital-twin">Digital Twin</a> &middot;
     <a href="#tensor-network-engine">Tensor Engine</a> &middot;
@@ -34,6 +35,8 @@
 ## Overview
 
 QONTOS Simulators provides the simulation and digital-twin layer for the QONTOS platform. It includes local simulators, noisy simulation, modular architecture models, and tensor-network tools used for validation, planning, and large-scale system studies. This repository supports both present-day software workflows and future native QONTOS hardware design work.
+
+Start with [docs/index.md](docs/index.md) for the lightweight docs hub and links into the broader public QONTOS ecosystem.
 
 It provides three simulation backends:
 
