@@ -9,6 +9,7 @@ This page is the lightweight docs hub for `qontos-sim`. Use it to navigate the s
 | [README.md](../README.md) | Product overview, installation, and simulator quick starts |
 | [digital-twin.md](digital-twin.md) | Architecture-planning and scaling guidance for the modular digital twin |
 | [Public Registry](https://github.com/qontos/.github/blob/main/docs/public-registry.md) | Shared map across the public QONTOS ecosystem |
+| [Release & Install Policy](https://github.com/qontos/.github/blob/main/docs/release-install-policy.md) | Canonical install and release guidance for the public QONTOS repos |
 | [Examples Repo](https://github.com/qontos/qontos-examples) | runnable examples and notebooks that use the simulator layer |
 
 ## Core Docs
