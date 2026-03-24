@@ -131,7 +131,7 @@ print(result.measurements[:5])
 ## Simulators
 
 | Simulator | Backend | Qubits | Speed | Use Case |
-| --- | --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- | :--- |
 | `LocalSimulatorExecutor` | Qiskit Aer (statevector) | Up to ~30 | Fast | Pipeline validation, unit tests |
 | `NoisySimulatorExecutor` | Qiskit Aer (depolarizing) | Up to ~30 | Fast | Noise-aware testing |
 | `ModularSimulator` | Digital twin | Unlimited (modeled) | Instant | Architecture studies, scenario planning |
@@ -150,7 +150,7 @@ The digital twin simulates workloads on modular architecture candidates. For a g
 ### Transduction Scenario Bands
 
 | Efficiency | Scenario | Interpretation |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | >= 20% | Stretch | Full modular planning |
 | >= 10% | Aggressive | Meaningful multi-module operation |
 | 1-10% | Base | Staged modular validation |
@@ -168,7 +168,7 @@ Pure NumPy implementation — zero external tensor network dependencies.
 ## Related Repositories
 
 | Repository | Description |
-| --- | --- |
+| :--- | :--- |
 | [qontos](https://github.com/qontos/qontos) | Flagship Python SDK |
 | [qontos-sim](https://github.com/qontos/qontos-sim) | Simulators and digital twin |
 | [qontos-examples](https://github.com/qontos/qontos-examples) | Tutorials and examples |
