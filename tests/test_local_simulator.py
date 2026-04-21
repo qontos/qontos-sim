@@ -14,6 +14,9 @@ import pytest
 import numpy as np
 
 from qontos.models.circuit import CircuitIR, InputFormat
+
+pytest.importorskip("qiskit")
+
 from qontos_sim.local import LocalSimulatorExecutor, ValidationResult, _circuit_ir_to_qiskit
 from qontos_sim.normalize import aer_result_to_partition_result
 from tests.circuit_fixtures import make_qasm_circuit, make_gate_list_circuit, BELL_QASM, GHZ3_QASM

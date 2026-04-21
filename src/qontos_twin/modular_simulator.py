@@ -30,8 +30,13 @@ class SystemConfig:
     num_modules: int = 4
     module: ModuleConfig = None
     transduction_efficiency: float = 0.15  # target from whitepaper
+    transduction_loss: float = 0.0
+    added_noise: float = 0.02
     bell_pair_rate_hz: float = 3000
+    bell_pair_retry_rate: float = 1.0
     inter_module_gate_time_us: float = 100
+    memory_wait_time_us: float = 0.0
+    control_jitter_us: float = 0.0
 
     def __post_init__(self):
         if self.module is None:
@@ -56,6 +61,11 @@ class SimulationResult:
     bell_pairs_needed: int
     effective_circuit_depth: int
     degradation_band: str  # STRETCH, TARGET, FALLBACK, MINIMUM
+    effective_transduction_efficiency: float
+    retry_overhead_us: float
+    memory_wait_overhead_us: float
+    control_jitter_overhead_us: float
+    added_noise_penalty: float
 
 
 class ModularSimulator:
@@ -107,10 +117,11 @@ def simulate_workload(
     total_gates = circuit_depth * gates_per_layer
     two_q_gates = int(total_gates * two_qubit_gate_ratio)
 
-    # Estimate inter-module gates (depends on connectivity)
-    # For a linear chain of modules, ~1/num_modules of 2Q gates cross boundaries
+    # Estimate inter-module gates with a mild module-scaling factor.
+    # We anchor the 4-module case near the historical behavior, while
+    # allowing larger fabrics to pay more link pressure than smaller ones.
     if config.num_modules > 1:
-        cross_module_ratio = 1.0 / config.num_modules
+        cross_module_ratio = min(0.5, (1.0 / config.num_modules) * math.sqrt(config.num_modules / 4.0))
         inter_module_gates = int(two_q_gates * cross_module_ratio)
     else:
         inter_module_gates = 0
@@ -122,36 +133,58 @@ def simulate_workload(
     f_2q = config.module.gate_fidelity_2q
     one_q_gates = total_gates - two_q_gates
 
-    # Intra-module fidelity
-    intra_fidelity = (f_1q ** one_q_gates) * (f_2q ** (two_q_gates - inter_module_gates))
+    effective_efficiency = max(
+        0.01,
+        config.transduction_efficiency * (1.0 - max(0.0, min(config.transduction_loss, 0.99))),
+    )
 
-    # Inter-module fidelity (depends on transduction)
-    inter_module_gate_fidelity = min(0.99, config.transduction_efficiency * 2)
-    if inter_module_gates > 0:
-        inter_fidelity = inter_module_gate_fidelity ** inter_module_gates
-    else:
-        inter_fidelity = 1.0
+    # Inter-module fidelity proxy (depends on transduction and noise)
+    added_noise_penalty = max(0.0, min(config.added_noise, 0.5))
+    inter_module_gate_fidelity = min(0.99, max(0.01, effective_efficiency * 2 - added_noise_penalty))
 
-    # Decoherence
+    retry_overhead = inter_module_gates * config.inter_module_gate_time_us * max(
+        0.0,
+        config.bell_pair_retry_rate - 1.0,
+    )
+    memory_wait_overhead = inter_module_gates * config.memory_wait_time_us
+    control_jitter_overhead = inter_module_gates * config.control_jitter_us
+    interconnect_runtime = (
+        inter_module_gates * config.inter_module_gate_time_us / effective_efficiency
+        + retry_overhead
+        + memory_wait_overhead
+        + control_jitter_overhead
+    )
+
+    # Runtime and decoherence proxy. The goal is a stable software-side signal
+    # rather than a literal hardware-fidelity prediction.
     total_time_us = (
         one_q_gates * config.module.gate_time_1q_ns / 1000
         + (two_q_gates - inter_module_gates) * config.module.gate_time_2q_ns / 1000
-        + inter_module_gates * config.inter_module_gate_time_us / max(0.01, config.transduction_efficiency)
+        + interconnect_runtime
     )
-    decoherence_factor = math.exp(-total_time_us / config.module.t1_us)
+    normalized_scale = max(1.0, float(config.module.qubits_per_module))
+    intra_error = (
+        one_q_gates * (1.0 - f_1q)
+        + (two_q_gates - inter_module_gates) * (1.0 - f_2q)
+    ) / normalized_scale
+    inter_error = (
+        inter_module_gates * (1.0 - inter_module_gate_fidelity)
+    ) / normalized_scale
+    decoherence_penalty = total_time_us / (config.module.t1_us * normalized_scale)
 
-    estimated_fidelity = intra_fidelity * inter_fidelity * decoherence_factor
+    estimated_fidelity = math.exp(-(intra_error + inter_error + decoherence_penalty))
 
     # Bell pairs needed
     bell_pairs = inter_module_gates  # 1 Bell pair per inter-module gate
 
     # Inter-module latency
-    inter_latency = inter_module_gates * config.inter_module_gate_time_us / max(0.01, config.transduction_efficiency)
+    inter_latency = interconnect_runtime
 
     # Effective depth increase from inter-module serialization
-    effective_depth = circuit_depth + inter_module_gates
+    retry_depth_penalty = int(inter_module_gates * max(0.0, config.bell_pair_retry_rate - 1.0))
+    effective_depth = circuit_depth + inter_module_gates + retry_depth_penalty
 
-    band, _ = classify_degradation(config.transduction_efficiency)
+    band, _ = classify_degradation(effective_efficiency)
 
     return SimulationResult(
         config=config,
@@ -159,12 +192,17 @@ def simulate_workload(
         total_gates=total_gates,
         inter_module_gates=inter_module_gates,
         intra_module_gates=intra_module_gates,
-        estimated_fidelity=max(0, estimated_fidelity),
+        estimated_fidelity=max(0.0, float(estimated_fidelity)),
         estimated_runtime_us=total_time_us,
         inter_module_latency_us=inter_latency,
         bell_pairs_needed=bell_pairs,
         effective_circuit_depth=effective_depth,
         degradation_band=band,
+        effective_transduction_efficiency=effective_efficiency,
+        retry_overhead_us=retry_overhead,
+        memory_wait_overhead_us=memory_wait_overhead,
+        control_jitter_overhead_us=control_jitter_overhead,
+        added_noise_penalty=added_noise_penalty,
     )
 
 

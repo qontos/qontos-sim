@@ -14,6 +14,9 @@ import pytest
 import numpy as np
 
 from qontos.models.circuit import CircuitIR
+
+pytest.importorskip("qiskit")
+
 from qontos_sim.noisy import NoisySimulatorExecutor, _DEFAULT_NOISE_CONFIG
 from tests.circuit_fixtures import make_qasm_circuit, BELL_QASM, GHZ3_QASM
 
