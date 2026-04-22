@@ -62,10 +62,15 @@ class SimulationResult:
     effective_circuit_depth: int
     degradation_band: str  # STRETCH, TARGET, FALLBACK, MINIMUM
     effective_transduction_efficiency: float
+    effective_bell_pair_rate_hz: float
+    throughput_ops_per_sec: float
     retry_overhead_us: float
     memory_wait_overhead_us: float
     control_jitter_overhead_us: float
     added_noise_penalty: float
+    runtime_breakdown_us: dict[str, float]
+    bottleneck_scores: dict[str, float]
+    dominant_bottleneck: str
 
 
 class ModularSimulator:
@@ -142,6 +147,14 @@ def simulate_workload(
     added_noise_penalty = max(0.0, min(config.added_noise, 0.5))
     inter_module_gate_fidelity = min(0.99, max(0.01, effective_efficiency * 2 - added_noise_penalty))
 
+    one_qubit_runtime = one_q_gates * config.module.gate_time_1q_ns / 1000
+    intra_module_two_qubit_runtime = (
+        (two_q_gates - inter_module_gates) * config.module.gate_time_2q_ns / 1000
+    )
+    base_interconnect_runtime = (
+        inter_module_gates * config.inter_module_gate_time_us / effective_efficiency
+    )
+
     retry_overhead = inter_module_gates * config.inter_module_gate_time_us * max(
         0.0,
         config.bell_pair_retry_rate - 1.0,
@@ -149,17 +162,24 @@ def simulate_workload(
     memory_wait_overhead = inter_module_gates * config.memory_wait_time_us
     control_jitter_overhead = inter_module_gates * config.control_jitter_us
     interconnect_runtime = (
-        inter_module_gates * config.inter_module_gate_time_us / effective_efficiency
+        base_interconnect_runtime
         + retry_overhead
         + memory_wait_overhead
         + control_jitter_overhead
+    )
+    effective_bell_pair_rate_hz = max(
+        1.0,
+        config.bell_pair_rate_hz
+        * effective_efficiency
+        * max(0.1, 1.0 - added_noise_penalty)
+        / max(config.bell_pair_retry_rate, 1.0),
     )
 
     # Runtime and decoherence proxy. The goal is a stable software-side signal
     # rather than a literal hardware-fidelity prediction.
     total_time_us = (
-        one_q_gates * config.module.gate_time_1q_ns / 1000
-        + (two_q_gates - inter_module_gates) * config.module.gate_time_2q_ns / 1000
+        one_qubit_runtime
+        + intra_module_two_qubit_runtime
         + interconnect_runtime
     )
     normalized_scale = max(1.0, float(config.module.qubits_per_module))
@@ -183,6 +203,29 @@ def simulate_workload(
     # Effective depth increase from inter-module serialization
     retry_depth_penalty = int(inter_module_gates * max(0.0, config.bell_pair_retry_rate - 1.0))
     effective_depth = circuit_depth + inter_module_gates + retry_depth_penalty
+    throughput_ops_per_sec = (
+        (total_gates / total_time_us) * 1_000_000 if total_time_us > 0.0 else 0.0
+    )
+
+    runtime_breakdown = {
+        "one_qubit": one_qubit_runtime,
+        "intra_module_two_qubit": intra_module_two_qubit_runtime,
+        "transduction_link": base_interconnect_runtime,
+        "retry": retry_overhead,
+        "memory_wait": memory_wait_overhead,
+        "control_jitter": control_jitter_overhead,
+    }
+    bottleneck_scores = _bottleneck_scores(
+        total_time_us=total_time_us,
+        runtime_breakdown=runtime_breakdown,
+        decoherence_penalty=decoherence_penalty,
+        bell_pairs_needed=bell_pairs,
+        effective_bell_pair_rate_hz=effective_bell_pair_rate_hz,
+    )
+    dominant_bottleneck = max(
+        {name: score for name, score in bottleneck_scores.items() if name != "decoherence"},
+        key=lambda name: bottleneck_scores[name],
+    )
 
     band, _ = classify_degradation(effective_efficiency)
 
@@ -199,11 +242,43 @@ def simulate_workload(
         effective_circuit_depth=effective_depth,
         degradation_band=band,
         effective_transduction_efficiency=effective_efficiency,
+        effective_bell_pair_rate_hz=effective_bell_pair_rate_hz,
+        throughput_ops_per_sec=throughput_ops_per_sec,
         retry_overhead_us=retry_overhead,
         memory_wait_overhead_us=memory_wait_overhead,
         control_jitter_overhead_us=control_jitter_overhead,
         added_noise_penalty=added_noise_penalty,
+        runtime_breakdown_us=runtime_breakdown,
+        bottleneck_scores=bottleneck_scores,
+        dominant_bottleneck=dominant_bottleneck,
     )
+
+
+def _bottleneck_scores(
+    *,
+    total_time_us: float,
+    runtime_breakdown: dict[str, float],
+    decoherence_penalty: float,
+    bell_pairs_needed: int,
+    effective_bell_pair_rate_hz: float,
+) -> dict[str, float]:
+    denominator = max(total_time_us, 1e-9)
+    entanglement_pressure = min(
+        1.0,
+        bell_pairs_needed / max(effective_bell_pair_rate_hz * 0.5, 1.0),
+    )
+    return {
+        "intra_module_runtime": (
+            runtime_breakdown["one_qubit"] + runtime_breakdown["intra_module_two_qubit"]
+        )
+        / denominator,
+        "transduction_link": runtime_breakdown["transduction_link"] / denominator,
+        "retry": runtime_breakdown["retry"] / denominator,
+        "memory_wait": runtime_breakdown["memory_wait"] / denominator,
+        "control_jitter": runtime_breakdown["control_jitter"] / denominator,
+        "decoherence": min(1.0, decoherence_penalty),
+        "entanglement_supply": entanglement_pressure,
+    }
 
 
 def run_scaling_analysis():

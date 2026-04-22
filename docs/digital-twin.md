@@ -14,6 +14,16 @@ The digital twin does **not** simulate quantum states. Instead it estimates
 aggregate metrics (fidelity, runtime, resource counts) from the system
 configuration and workload parameters.
 
+It now also exposes a hybrid bottleneck decomposition so teams can see whether
+the seam is currently limited by:
+
+- base transduction-link runtime
+- retry overhead from Bell-pair instability
+- memory wait accumulation
+- control jitter accumulation
+- decoherence pressure
+- raw entanglement-supply pressure
+
 ## Key Concepts
 
 ### Modular Architecture
@@ -70,6 +80,10 @@ print(f"Runtime (us):    {result.estimated_runtime_us:.1f}")
 print(f"Bell pairs:      {result.bell_pairs_needed}")
 print(f"Effective depth: {result.effective_circuit_depth}")
 print(f"Band:            {result.degradation_band}")
+print(f"Bell-pair rate:  {result.effective_bell_pair_rate_hz:.1f} Hz")
+print(f"Throughput:      {result.throughput_ops_per_sec:.1f} ops/sec")
+print(f"Bottleneck:      {result.dominant_bottleneck}")
+print(f"Runtime split:   {result.runtime_breakdown_us}")
 ```
 
 ### Scaling Analysis

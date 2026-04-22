@@ -86,10 +86,20 @@ class TestSimulateWorkloadFields:
         assert isinstance(result.effective_circuit_depth, int)
         assert isinstance(result.degradation_band, str)
         assert isinstance(result.effective_transduction_efficiency, float)
+        assert isinstance(result.effective_bell_pair_rate_hz, float)
+        assert isinstance(result.throughput_ops_per_sec, float)
         assert isinstance(result.retry_overhead_us, float)
         assert isinstance(result.memory_wait_overhead_us, float)
         assert isinstance(result.control_jitter_overhead_us, float)
         assert isinstance(result.added_noise_penalty, float)
+        assert isinstance(result.runtime_breakdown_us, dict)
+        assert isinstance(result.bottleneck_scores, dict)
+        assert isinstance(result.dominant_bottleneck, str)
+
+    def test_runtime_breakdown_matches_total_runtime(self):
+        cfg = SystemConfig(num_modules=4)
+        result = simulate_workload(cfg, circuit_depth=50)
+        assert abs(sum(result.runtime_breakdown_us.values()) - result.estimated_runtime_us) < 1e-6
 
     def test_gate_count_sums(self):
         cfg = SystemConfig(num_modules=4)
@@ -301,6 +311,7 @@ class TestHybridKnobSensitivity:
         assert stressed.control_jitter_overhead_us > 0.0
         assert stressed.inter_module_latency_us > baseline.inter_module_latency_us
         assert stressed.effective_circuit_depth > baseline.effective_circuit_depth
+        assert stressed.effective_bell_pair_rate_hz < baseline.effective_bell_pair_rate_hz
 
     def test_added_noise_degrades_fidelity(self):
         clean = simulate_workload(
@@ -313,3 +324,34 @@ class TestHybridKnobSensitivity:
         )
         assert noisy.added_noise_penalty > clean.added_noise_penalty
         assert noisy.estimated_fidelity < clean.estimated_fidelity
+
+    def test_dominant_bottleneck_tracks_memory_wait_stress(self):
+        stressed = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                memory_wait_time_us=120.0,
+                control_jitter_us=1.0,
+            ),
+            circuit_depth=100,
+        )
+        assert stressed.dominant_bottleneck in {
+            "memory_wait",
+            "transduction_link",
+            "entanglement_supply",
+        }
+
+    def test_throughput_drops_under_seam_stress(self):
+        baseline = simulate_workload(
+            SystemConfig(num_modules=4, transduction_efficiency=0.2),
+            circuit_depth=100,
+        )
+        stressed = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.08,
+                transduction_loss=0.15,
+                bell_pair_retry_rate=1.8,
+            ),
+            circuit_depth=100,
+        )
+        assert stressed.throughput_ops_per_sec < baseline.throughput_ops_per_sec
