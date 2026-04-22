@@ -30,6 +30,17 @@ simulation anchored to the nominal system design while still making lower link
 quality and higher retry pressure show up as slower Bell-pair supply, larger
 latency, and lower throughput.
 
+It now also exposes explicit entanglement-fabric controls:
+
+- `entanglement_parallel_links`: parallel Bell-pair supply lanes
+- `entanglement_buffer_pairs`: pre-generated Bell-pair inventory
+
+That lets us ask software-side architecture questions like:
+
+- how many parallel photonic lanes are needed before supply stops queueing
+- how much Bell-pair buffering changes modular latency
+- whether the seam is protocol-limited or entanglement-supply-limited
+
 ## Key Concepts
 
 ### Modular Architecture
@@ -88,6 +99,10 @@ print(f"Effective depth: {result.effective_circuit_depth}")
 print(f"Band:            {result.degradation_band}")
 print(f"Link quality:    {result.link_quality:.3f}")
 print(f"Bell attempts:   {result.expected_attempts_per_bell_pair:.2f}")
+print(f"Parallel links:  {result.entanglement_parallel_links}")
+print(f"Buffered pairs:  {result.buffered_bell_pairs_used}")
+print(f"Supply time:     {result.entanglement_supply_time_us:.1f} us")
+print(f"Supply util.:    {result.entanglement_supply_utilization:.2f}")
 print(f"Bell-pair rate:  {result.effective_bell_pair_rate_hz:.1f} Hz")
 print(f"Throughput:      {result.throughput_ops_per_sec:.1f} ops/sec")
 print(f"Bottleneck:      {result.dominant_bottleneck}")

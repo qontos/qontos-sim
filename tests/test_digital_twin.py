@@ -48,12 +48,16 @@ class TestSystemConfig:
             transduction_loss=0.1,
             added_noise=0.05,
             bell_pair_retry_rate=1.5,
+            entanglement_parallel_links=3,
+            entanglement_buffer_pairs=128,
             memory_wait_time_us=12.0,
             control_jitter_us=3.0,
         )
         assert cfg.transduction_loss == 0.1
         assert cfg.added_noise == 0.05
         assert cfg.bell_pair_retry_rate == 1.5
+        assert cfg.entanglement_parallel_links == 3
+        assert cfg.entanglement_buffer_pairs == 128
         assert cfg.memory_wait_time_us == 12.0
         assert cfg.control_jitter_us == 3.0
 
@@ -88,6 +92,11 @@ class TestSimulateWorkloadFields:
         assert isinstance(result.effective_transduction_efficiency, float)
         assert isinstance(result.link_quality, float)
         assert isinstance(result.expected_attempts_per_bell_pair, float)
+        assert isinstance(result.entanglement_parallel_links, int)
+        assert isinstance(result.entanglement_buffer_pairs, int)
+        assert isinstance(result.buffered_bell_pairs_used, int)
+        assert isinstance(result.entanglement_supply_time_us, float)
+        assert isinstance(result.entanglement_supply_utilization, float)
         assert isinstance(result.effective_bell_pair_rate_hz, float)
         assert isinstance(result.throughput_ops_per_sec, float)
         assert isinstance(result.retry_overhead_us, float)
@@ -359,3 +368,29 @@ class TestHybridKnobSensitivity:
             circuit_depth=100,
         )
         assert stressed.throughput_ops_per_sec < baseline.throughput_ops_per_sec
+
+    def test_parallel_links_increase_supply_capacity(self):
+        baseline = simulate_workload(
+            SystemConfig(num_modules=4, transduction_efficiency=0.12, entanglement_parallel_links=1),
+            circuit_depth=100,
+        )
+        upgraded = simulate_workload(
+            SystemConfig(num_modules=4, transduction_efficiency=0.12, entanglement_parallel_links=4),
+            circuit_depth=100,
+        )
+        assert upgraded.effective_bell_pair_rate_hz > baseline.effective_bell_pair_rate_hz
+        assert upgraded.entanglement_supply_time_us <= baseline.entanglement_supply_time_us
+        assert upgraded.inter_module_latency_us <= baseline.inter_module_latency_us
+
+    def test_buffered_pairs_reduce_supply_pressure(self):
+        baseline = simulate_workload(
+            SystemConfig(num_modules=4, transduction_efficiency=0.10, entanglement_buffer_pairs=0),
+            circuit_depth=100,
+        )
+        buffered = simulate_workload(
+            SystemConfig(num_modules=4, transduction_efficiency=0.10, entanglement_buffer_pairs=600),
+            circuit_depth=100,
+        )
+        assert buffered.buffered_bell_pairs_used > 0
+        assert buffered.entanglement_supply_time_us < baseline.entanglement_supply_time_us
+        assert buffered.entanglement_supply_utilization <= baseline.entanglement_supply_utilization

@@ -34,6 +34,8 @@ class SystemConfig:
     added_noise: float = 0.02
     bell_pair_rate_hz: float = 3000
     bell_pair_retry_rate: float = 1.0
+    entanglement_parallel_links: int = 1
+    entanglement_buffer_pairs: int = 0
     inter_module_gate_time_us: float = 100
     memory_wait_time_us: float = 0.0
     control_jitter_us: float = 0.0
@@ -64,6 +66,11 @@ class SimulationResult:
     effective_transduction_efficiency: float
     link_quality: float
     expected_attempts_per_bell_pair: float
+    entanglement_parallel_links: int
+    entanglement_buffer_pairs: int
+    buffered_bell_pairs_used: int
+    entanglement_supply_time_us: float
+    entanglement_supply_utilization: float
     effective_bell_pair_rate_hz: float
     throughput_ops_per_sec: float
     retry_overhead_us: float
@@ -165,9 +172,36 @@ def simulate_workload(
     link_penalty_factor = max(1.0, TARGET_LINK_QUALITY / link_quality)
     retry_multiplier = max(1.0, config.bell_pair_retry_rate)
     expected_attempts_per_bell_pair = link_penalty_factor * retry_multiplier
+    parallel_links = max(1, int(config.entanglement_parallel_links))
+    buffered_bell_pairs_used = min(
+        inter_module_gates,
+        max(0, int(config.entanglement_buffer_pairs)),
+    )
+    supply_pairs_needed = max(0, inter_module_gates - buffered_bell_pairs_used)
 
-    base_interconnect_runtime = (
+    protocol_link_runtime = (
         inter_module_gates * config.inter_module_gate_time_us * link_penalty_factor
+    )
+    effective_bell_pair_rate_hz = max(
+        1.0,
+        (config.bell_pair_rate_hz * parallel_links) / expected_attempts_per_bell_pair,
+    )
+    entanglement_supply_time_us = (
+        (supply_pairs_needed / effective_bell_pair_rate_hz) * 1_000_000.0
+        if supply_pairs_needed > 0
+        else 0.0
+    )
+    supply_queue_overhead = max(0.0, entanglement_supply_time_us - protocol_link_runtime)
+    base_interconnect_runtime = protocol_link_runtime + supply_queue_overhead
+    supply_capacity_during_protocol = (
+        (effective_bell_pair_rate_hz * protocol_link_runtime) / 1_000_000.0
+        if protocol_link_runtime > 0.0
+        else float(parallel_links)
+    )
+    entanglement_supply_utilization = (
+        supply_pairs_needed / max(supply_capacity_during_protocol, 1e-9)
+        if supply_pairs_needed > 0
+        else 0.0
     )
 
     retry_overhead = (
@@ -183,10 +217,6 @@ def simulate_workload(
         + retry_overhead
         + memory_wait_overhead
         + control_jitter_overhead
-    )
-    effective_bell_pair_rate_hz = max(
-        1.0,
-        config.bell_pair_rate_hz / expected_attempts_per_bell_pair,
     )
 
     # Runtime and decoherence proxy. The goal is a stable software-side signal
@@ -224,7 +254,8 @@ def simulate_workload(
     runtime_breakdown = {
         "one_qubit": one_qubit_runtime,
         "intra_module_two_qubit": intra_module_two_qubit_runtime,
-        "transduction_link": base_interconnect_runtime,
+        "transduction_link": protocol_link_runtime,
+        "entanglement_supply": supply_queue_overhead,
         "retry": retry_overhead,
         "memory_wait": memory_wait_overhead,
         "control_jitter": control_jitter_overhead,
@@ -233,8 +264,7 @@ def simulate_workload(
         total_time_us=total_time_us,
         runtime_breakdown=runtime_breakdown,
         decoherence_penalty=decoherence_penalty,
-        bell_pairs_needed=bell_pairs,
-        effective_bell_pair_rate_hz=effective_bell_pair_rate_hz,
+        entanglement_supply_utilization=entanglement_supply_utilization,
     )
     dominant_bottleneck = max(
         {name: score for name, score in bottleneck_scores.items() if name != "decoherence"},
@@ -258,6 +288,11 @@ def simulate_workload(
         effective_transduction_efficiency=effective_efficiency,
         link_quality=link_quality,
         expected_attempts_per_bell_pair=expected_attempts_per_bell_pair,
+        entanglement_parallel_links=parallel_links,
+        entanglement_buffer_pairs=max(0, int(config.entanglement_buffer_pairs)),
+        buffered_bell_pairs_used=buffered_bell_pairs_used,
+        entanglement_supply_time_us=entanglement_supply_time_us,
+        entanglement_supply_utilization=entanglement_supply_utilization,
         effective_bell_pair_rate_hz=effective_bell_pair_rate_hz,
         throughput_ops_per_sec=throughput_ops_per_sec,
         retry_overhead_us=retry_overhead,
@@ -275,25 +310,23 @@ def _bottleneck_scores(
     total_time_us: float,
     runtime_breakdown: dict[str, float],
     decoherence_penalty: float,
-    bell_pairs_needed: int,
-    effective_bell_pair_rate_hz: float,
+    entanglement_supply_utilization: float,
 ) -> dict[str, float]:
     denominator = max(total_time_us, 1e-9)
-    entanglement_pressure = min(
-        1.0,
-        bell_pairs_needed / max(effective_bell_pair_rate_hz * 0.5, 1.0),
-    )
     return {
         "intra_module_runtime": (
             runtime_breakdown["one_qubit"] + runtime_breakdown["intra_module_two_qubit"]
         )
         / denominator,
         "transduction_link": runtime_breakdown["transduction_link"] / denominator,
+        "entanglement_supply": max(
+            runtime_breakdown["entanglement_supply"] / denominator,
+            min(1.0, entanglement_supply_utilization),
+        ),
         "retry": runtime_breakdown["retry"] / denominator,
         "memory_wait": runtime_breakdown["memory_wait"] / denominator,
         "control_jitter": runtime_breakdown["control_jitter"] / denominator,
         "decoherence": min(1.0, decoherence_penalty),
-        "entanglement_supply": entanglement_pressure,
     }
 
 
