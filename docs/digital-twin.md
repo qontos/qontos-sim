@@ -24,6 +24,12 @@ the seam is currently limited by:
 - decoherence pressure
 - raw entanglement-supply pressure
 
+The seam model is now calibrated around the `TARGET` operating point instead of
+dividing inter-module runtime by raw transduction efficiency. That keeps the
+simulation anchored to the nominal system design while still making lower link
+quality and higher retry pressure show up as slower Bell-pair supply, larger
+latency, and lower throughput.
+
 ## Key Concepts
 
 ### Modular Architecture
@@ -80,6 +86,8 @@ print(f"Runtime (us):    {result.estimated_runtime_us:.1f}")
 print(f"Bell pairs:      {result.bell_pairs_needed}")
 print(f"Effective depth: {result.effective_circuit_depth}")
 print(f"Band:            {result.degradation_band}")
+print(f"Link quality:    {result.link_quality:.3f}")
+print(f"Bell attempts:   {result.expected_attempts_per_bell_pair:.2f}")
 print(f"Bell-pair rate:  {result.effective_bell_pair_rate_hz:.1f} Hz")
 print(f"Throughput:      {result.throughput_ops_per_sec:.1f} ops/sec")
 print(f"Bottleneck:      {result.dominant_bottleneck}")

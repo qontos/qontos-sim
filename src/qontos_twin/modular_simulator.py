@@ -62,6 +62,8 @@ class SimulationResult:
     effective_circuit_depth: int
     degradation_band: str  # STRETCH, TARGET, FALLBACK, MINIMUM
     effective_transduction_efficiency: float
+    link_quality: float
+    expected_attempts_per_bell_pair: float
     effective_bell_pair_rate_hz: float
     throughput_ops_per_sec: float
     retry_overhead_us: float
@@ -98,6 +100,8 @@ DEGRADATION_BANDS = [
     (0.10, "FALLBACK", "~2 kHz", "~200 ops/sec", "Sparse communication"),
     (0.05, "MINIMUM",  "~1 kHz", "~100 ops/sec", "Single-module operation"),
 ]
+
+TARGET_LINK_QUALITY = 0.15
 
 
 def classify_degradation(efficiency: float) -> tuple[str, str]:
@@ -151,13 +155,26 @@ def simulate_workload(
     intra_module_two_qubit_runtime = (
         (two_q_gates - inter_module_gates) * config.module.gate_time_2q_ns / 1000
     )
+    # The inter-module gate time is already a target-level systems constant.
+    # Scale seam pressure relative to the target link quality instead of the
+    # raw efficiency to avoid double-counting transduction penalties.
+    link_quality = max(
+        0.02,
+        effective_efficiency * max(0.1, 1.0 - added_noise_penalty),
+    )
+    link_penalty_factor = max(1.0, TARGET_LINK_QUALITY / link_quality)
+    retry_multiplier = max(1.0, config.bell_pair_retry_rate)
+    expected_attempts_per_bell_pair = link_penalty_factor * retry_multiplier
+
     base_interconnect_runtime = (
-        inter_module_gates * config.inter_module_gate_time_us / effective_efficiency
+        inter_module_gates * config.inter_module_gate_time_us * link_penalty_factor
     )
 
-    retry_overhead = inter_module_gates * config.inter_module_gate_time_us * max(
-        0.0,
-        config.bell_pair_retry_rate - 1.0,
+    retry_overhead = (
+        inter_module_gates
+        * config.inter_module_gate_time_us
+        * link_penalty_factor
+        * max(0.0, retry_multiplier - 1.0)
     )
     memory_wait_overhead = inter_module_gates * config.memory_wait_time_us
     control_jitter_overhead = inter_module_gates * config.control_jitter_us
@@ -169,10 +186,7 @@ def simulate_workload(
     )
     effective_bell_pair_rate_hz = max(
         1.0,
-        config.bell_pair_rate_hz
-        * effective_efficiency
-        * max(0.1, 1.0 - added_noise_penalty)
-        / max(config.bell_pair_retry_rate, 1.0),
+        config.bell_pair_rate_hz / expected_attempts_per_bell_pair,
     )
 
     # Runtime and decoherence proxy. The goal is a stable software-side signal
@@ -242,6 +256,8 @@ def simulate_workload(
         effective_circuit_depth=effective_depth,
         degradation_band=band,
         effective_transduction_efficiency=effective_efficiency,
+        link_quality=link_quality,
+        expected_attempts_per_bell_pair=expected_attempts_per_bell_pair,
         effective_bell_pair_rate_hz=effective_bell_pair_rate_hz,
         throughput_ops_per_sec=throughput_ops_per_sec,
         retry_overhead_us=retry_overhead,

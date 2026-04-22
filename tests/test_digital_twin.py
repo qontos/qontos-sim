@@ -86,6 +86,8 @@ class TestSimulateWorkloadFields:
         assert isinstance(result.effective_circuit_depth, int)
         assert isinstance(result.degradation_band, str)
         assert isinstance(result.effective_transduction_efficiency, float)
+        assert isinstance(result.link_quality, float)
+        assert isinstance(result.expected_attempts_per_bell_pair, float)
         assert isinstance(result.effective_bell_pair_rate_hz, float)
         assert isinstance(result.throughput_ops_per_sec, float)
         assert isinstance(result.retry_overhead_us, float)
@@ -293,6 +295,7 @@ class TestHybridKnobSensitivity:
             )
         )
         assert lossy.effective_transduction_efficiency < baseline.effective_transduction_efficiency
+        assert lossy.link_quality < baseline.link_quality
         assert lossy.inter_module_latency_us > baseline.inter_module_latency_us
 
     def test_retry_and_wait_penalties_increase_latency(self):
@@ -309,6 +312,7 @@ class TestHybridKnobSensitivity:
         assert stressed.retry_overhead_us > 0.0
         assert stressed.memory_wait_overhead_us > 0.0
         assert stressed.control_jitter_overhead_us > 0.0
+        assert stressed.expected_attempts_per_bell_pair > baseline.expected_attempts_per_bell_pair
         assert stressed.inter_module_latency_us > baseline.inter_module_latency_us
         assert stressed.effective_circuit_depth > baseline.effective_circuit_depth
         assert stressed.effective_bell_pair_rate_hz < baseline.effective_bell_pair_rate_hz
