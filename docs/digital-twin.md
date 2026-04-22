@@ -44,12 +44,19 @@ That lets us ask software-side architecture questions like:
 The transduction side now also has explicit quality controls:
 
 - `transduction_calibration_quality`: how well the transducer is tuned to its nominal target
+- `optical_coupling_efficiency`: how much of the converted optical signal survives into the link
+- `heralding_success_probability`: how often the photonic detection path successfully declares a usable Bell event
+- `detector_efficiency`: how much detector loss the photonic receive path pays
+- `phase_lock_duty_cycle`: how much of the operating window stays phase-locked instead of falling back into reacquisition
 - `link_phase_stability`: how stable the microwave-to-optical link stays under operation
 
 Those knobs feed directly into:
 
+- transduction channel efficiency before dynamic phase/noise penalties
 - effective transduction efficiency
+- weakest channel-component margin versus the nominal target stack
 - retry-adjusted link fidelity
+- dynamic link stability after phase-lock duty and added-noise penalties
 - link margin versus the `TARGET` operating point
 - the split between a supply bottleneck and a transduction-link bottleneck
 
@@ -109,11 +116,19 @@ print(f"Runtime (us):    {result.estimated_runtime_us:.1f}")
 print(f"Bell pairs:      {result.bell_pairs_needed}")
 print(f"Effective depth: {result.effective_circuit_depth}")
 print(f"Band:            {result.degradation_band}")
+print(f"Channel eff.:    {result.transduction_channel_efficiency:.3f}")
+print(f"Channel margin:  {result.channel_margin_to_target:.2f}x")
 print(f"Link quality:    {result.link_quality:.3f}")
+print(f"Link stability:  {result.dynamic_link_stability:.3f}")
 print(f"Link margin:     {result.link_margin_to_target:.2f}x")
 print(f"Link fidelity*:  {result.retry_adjusted_link_fidelity:.3f}")
 print(f"Calibration:     {result.transduction_calibration_quality:.2f}")
+print(f"Optical couple:  {result.optical_coupling_efficiency:.2f}")
+print(f"Heralding:       {result.heralding_success_probability:.2f}")
+print(f"Detector eff.:   {result.detector_efficiency:.2f}")
+print(f"Phase-lock duty: {result.phase_lock_duty_cycle:.2f}")
 print(f"Phase stability: {result.link_phase_stability:.2f}")
+print(f"Weakest channel: {result.weakest_channel_component} ({result.weakest_channel_margin:.2f}x)")
 print(f"Bell attempts:   {result.expected_attempts_per_bell_pair:.2f}")
 print(f"Parallel links:  {result.entanglement_parallel_links}")
 print(f"Buffered pairs:  {result.buffered_bell_pairs_used}")

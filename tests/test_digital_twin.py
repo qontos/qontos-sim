@@ -47,6 +47,10 @@ class TestSystemConfig:
         cfg = SystemConfig(
             transduction_loss=0.1,
             transduction_calibration_quality=0.85,
+            optical_coupling_efficiency=0.8,
+            heralding_success_probability=0.75,
+            detector_efficiency=0.9,
+            phase_lock_duty_cycle=0.88,
             link_phase_stability=0.8,
             added_noise=0.05,
             bell_pair_retry_rate=1.5,
@@ -57,6 +61,10 @@ class TestSystemConfig:
         )
         assert cfg.transduction_loss == 0.1
         assert cfg.transduction_calibration_quality == 0.85
+        assert cfg.optical_coupling_efficiency == 0.8
+        assert cfg.heralding_success_probability == 0.75
+        assert cfg.detector_efficiency == 0.9
+        assert cfg.phase_lock_duty_cycle == 0.88
         assert cfg.link_phase_stability == 0.8
         assert cfg.added_noise == 0.05
         assert cfg.bell_pair_retry_rate == 1.5
@@ -94,11 +102,23 @@ class TestSimulateWorkloadFields:
         assert isinstance(result.effective_circuit_depth, int)
         assert isinstance(result.degradation_band, str)
         assert isinstance(result.effective_transduction_efficiency, float)
+        assert isinstance(result.transduction_channel_efficiency, float)
+        assert isinstance(result.channel_margin_to_target, float)
         assert isinstance(result.link_quality, float)
+        assert isinstance(result.dynamic_link_stability, float)
         assert isinstance(result.link_margin_to_target, float)
         assert isinstance(result.retry_adjusted_link_fidelity, float)
         assert isinstance(result.transduction_calibration_quality, float)
+        assert isinstance(result.optical_coupling_efficiency, float)
+        assert isinstance(result.heralding_success_probability, float)
+        assert isinstance(result.detector_efficiency, float)
+        assert isinstance(result.phase_lock_duty_cycle, float)
         assert isinstance(result.link_phase_stability, float)
+        assert isinstance(result.channel_component_values, dict)
+        assert isinstance(result.channel_component_margins, dict)
+        assert isinstance(result.weakest_channel_component, str)
+        assert isinstance(result.weakest_channel_value, float)
+        assert isinstance(result.weakest_channel_margin, float)
         assert isinstance(result.expected_attempts_per_bell_pair, float)
         assert isinstance(result.entanglement_parallel_links, int)
         assert isinstance(result.entanglement_buffer_pairs, int)
@@ -365,6 +385,72 @@ class TestHybridKnobSensitivity:
         )
         assert strong.effective_transduction_efficiency > weak.effective_transduction_efficiency
         assert strong.link_margin_to_target > weak.link_margin_to_target
+        assert strong.retry_adjusted_link_fidelity > weak.retry_adjusted_link_fidelity
+
+    def test_optical_coupling_maps_to_channel_margin(self):
+        weak = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.15,
+                optical_coupling_efficiency=0.72,
+            ),
+            circuit_depth=50,
+        )
+        strong = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.15,
+                optical_coupling_efficiency=1.0,
+            ),
+            circuit_depth=50,
+        )
+        assert weak.weakest_channel_component == "optical_coupling"
+        assert strong.transduction_channel_efficiency > weak.transduction_channel_efficiency
+        assert strong.channel_margin_to_target > weak.channel_margin_to_target
+
+    def test_heralding_and_detector_limits_raise_attempt_count(self):
+        weak = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.15,
+                heralding_success_probability=0.7,
+                detector_efficiency=0.8,
+            ),
+            circuit_depth=50,
+        )
+        strong = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.15,
+                heralding_success_probability=1.0,
+                detector_efficiency=1.0,
+            ),
+            circuit_depth=50,
+        )
+        assert weak.channel_component_values["heralding"] == pytest.approx(0.7)
+        assert weak.channel_component_values["detector"] == pytest.approx(0.8)
+        assert weak.expected_attempts_per_bell_pair > strong.expected_attempts_per_bell_pair
+        assert weak.link_quality < strong.link_quality
+
+    def test_phase_lock_duty_cycle_degrades_dynamic_link_stability(self):
+        weak = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.15,
+                phase_lock_duty_cycle=0.7,
+            ),
+            circuit_depth=50,
+        )
+        strong = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.15,
+                phase_lock_duty_cycle=1.0,
+            ),
+            circuit_depth=50,
+        )
+        assert weak.weakest_channel_component == "phase_lock"
+        assert strong.dynamic_link_stability > weak.dynamic_link_stability
         assert strong.retry_adjusted_link_fidelity > weak.retry_adjusted_link_fidelity
 
     def test_phase_stability_reduces_retry_pressure(self):

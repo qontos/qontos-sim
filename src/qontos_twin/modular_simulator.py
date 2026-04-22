@@ -32,6 +32,10 @@ class SystemConfig:
     transduction_efficiency: float = 0.15  # target from whitepaper
     transduction_loss: float = 0.0
     transduction_calibration_quality: float = 1.0
+    optical_coupling_efficiency: float = 1.0
+    heralding_success_probability: float = 1.0
+    detector_efficiency: float = 1.0
+    phase_lock_duty_cycle: float = 1.0
     link_phase_stability: float = 1.0
     added_noise: float = 0.02
     bell_pair_rate_hz: float = 3000
@@ -66,11 +70,23 @@ class SimulationResult:
     effective_circuit_depth: int
     degradation_band: str  # STRETCH, TARGET, FALLBACK, MINIMUM
     effective_transduction_efficiency: float
+    transduction_channel_efficiency: float
+    channel_margin_to_target: float
     link_quality: float
+    dynamic_link_stability: float
     link_margin_to_target: float
     retry_adjusted_link_fidelity: float
     transduction_calibration_quality: float
+    optical_coupling_efficiency: float
+    heralding_success_probability: float
+    detector_efficiency: float
+    phase_lock_duty_cycle: float
     link_phase_stability: float
+    channel_component_values: dict[str, float]
+    channel_component_margins: dict[str, float]
+    weakest_channel_component: str
+    weakest_channel_value: float
+    weakest_channel_margin: float
     expected_attempts_per_bell_pair: float
     entanglement_parallel_links: int
     entanglement_buffer_pairs: int
@@ -115,6 +131,15 @@ DEGRADATION_BANDS = [
 ]
 
 TARGET_LINK_QUALITY = 0.15
+TARGET_CHANNEL_COMPONENTS = {
+    "base_conversion": TARGET_LINK_QUALITY,
+    "calibration": 1.0,
+    "optical_coupling": 1.0,
+    "heralding": 1.0,
+    "detector": 1.0,
+    "phase_lock": 1.0,
+    "phase_stability": 1.0,
+}
 
 
 def classify_degradation(efficiency: float) -> tuple[str, str]:
@@ -155,16 +180,45 @@ def simulate_workload(
     f_2q = config.module.gate_fidelity_2q
     one_q_gates = total_gates - two_q_gates
 
-    calibration_quality = max(
-        0.4,
-        min(float(config.transduction_calibration_quality), 1.0),
+    calibration_quality = _unit_interval(config.transduction_calibration_quality, floor=0.4)
+    optical_coupling = _unit_interval(config.optical_coupling_efficiency, floor=0.4)
+    heralding_success = _unit_interval(config.heralding_success_probability, floor=0.4)
+    detector_efficiency = _unit_interval(config.detector_efficiency, floor=0.4)
+    phase_lock_duty_cycle = _unit_interval(config.phase_lock_duty_cycle, floor=0.4)
+    phase_stability = _unit_interval(config.link_phase_stability, floor=0.4)
+    nominal_efficiency = config.transduction_efficiency * (
+        1.0 - max(0.0, min(config.transduction_loss, 0.99))
     )
-    phase_stability = max(
-        0.4,
-        min(float(config.link_phase_stability), 1.0),
+    base_conversion_efficiency = max(0.01, nominal_efficiency)
+    channel_efficiency = max(
+        0.01,
+        base_conversion_efficiency
+        * calibration_quality
+        * optical_coupling
+        * heralding_success
+        * detector_efficiency,
     )
-    nominal_efficiency = config.transduction_efficiency * (1.0 - max(0.0, min(config.transduction_loss, 0.99)))
-    effective_efficiency = max(0.01, nominal_efficiency * calibration_quality)
+    effective_efficiency = channel_efficiency
+
+    channel_component_values = {
+        "base_conversion": base_conversion_efficiency,
+        "calibration": calibration_quality,
+        "optical_coupling": optical_coupling,
+        "heralding": heralding_success,
+        "detector": detector_efficiency,
+        "phase_lock": phase_lock_duty_cycle,
+        "phase_stability": phase_stability,
+    }
+    channel_component_margins = {
+        name: value / max(TARGET_CHANNEL_COMPONENTS[name], 1e-9)
+        for name, value in channel_component_values.items()
+    }
+    weakest_channel_component = min(
+        channel_component_margins,
+        key=channel_component_margins.get,
+    )
+    weakest_channel_margin = channel_component_margins[weakest_channel_component]
+    weakest_channel_value = channel_component_values[weakest_channel_component]
 
     # Inter-module fidelity proxy (depends on transduction, calibration, and phase stability)
     added_noise_penalty = max(
@@ -176,11 +230,20 @@ def simulate_workload(
             0.5,
         ),
     )
+    dynamic_link_stability = (
+        phase_lock_duty_cycle
+        * phase_stability
+        * max(0.1, 1.0 - added_noise_penalty)
+    )
     inter_module_gate_fidelity = min(
         0.99,
         max(
             0.01,
-            effective_efficiency * 2 * phase_stability - added_noise_penalty,
+            effective_efficiency
+            * 2
+            * phase_stability
+            * phase_lock_duty_cycle
+            - added_noise_penalty,
         ),
     )
 
@@ -191,16 +254,20 @@ def simulate_workload(
     # The inter-module gate time is already a target-level systems constant.
     # Scale seam pressure relative to the target link quality instead of the
     # raw efficiency to avoid double-counting transduction penalties.
-    link_quality = max(
-        0.02,
-        effective_efficiency * phase_stability * max(0.1, 1.0 - added_noise_penalty),
-    )
+    link_quality = max(0.02, effective_efficiency * dynamic_link_stability)
+    channel_margin_to_target = effective_efficiency / TARGET_LINK_QUALITY
     link_margin_to_target = link_quality / TARGET_LINK_QUALITY
     link_penalty_factor = max(1.0, TARGET_LINK_QUALITY / link_quality)
     retry_multiplier = max(
         1.0,
         config.bell_pair_retry_rate
-        * (1.0 + (1.0 - phase_stability) * 0.8 + (1.0 - calibration_quality) * 0.35),
+        * (
+            1.0
+            + (1.0 - phase_stability) * 0.8
+            + (1.0 - phase_lock_duty_cycle) * 0.55
+            + (1.0 - calibration_quality) * 0.35
+            + (1.0 - heralding_success) * 0.3
+        ),
     )
     retry_adjusted_link_fidelity = inter_module_gate_fidelity / retry_multiplier
     expected_attempts_per_bell_pair = link_penalty_factor * retry_multiplier
@@ -318,11 +385,23 @@ def simulate_workload(
         effective_circuit_depth=effective_depth,
         degradation_band=band,
         effective_transduction_efficiency=effective_efficiency,
+        transduction_channel_efficiency=channel_efficiency,
+        channel_margin_to_target=channel_margin_to_target,
         link_quality=link_quality,
+        dynamic_link_stability=dynamic_link_stability,
         link_margin_to_target=link_margin_to_target,
         retry_adjusted_link_fidelity=retry_adjusted_link_fidelity,
         transduction_calibration_quality=calibration_quality,
+        optical_coupling_efficiency=optical_coupling,
+        heralding_success_probability=heralding_success,
+        detector_efficiency=detector_efficiency,
+        phase_lock_duty_cycle=phase_lock_duty_cycle,
         link_phase_stability=phase_stability,
+        channel_component_values=channel_component_values,
+        channel_component_margins=channel_component_margins,
+        weakest_channel_component=weakest_channel_component,
+        weakest_channel_value=weakest_channel_value,
+        weakest_channel_margin=weakest_channel_margin,
         expected_attempts_per_bell_pair=expected_attempts_per_bell_pair,
         entanglement_parallel_links=parallel_links,
         entanglement_buffer_pairs=max(0, int(config.entanglement_buffer_pairs)),
@@ -364,6 +443,12 @@ def _bottleneck_scores(
         "control_jitter": runtime_breakdown["control_jitter"] / denominator,
         "decoherence": min(1.0, decoherence_penalty),
     }
+
+
+def _unit_interval(value: float, *, floor: float = 0.0) -> float:
+    """Clamp a floating-point quality term into a safe unit interval."""
+
+    return max(floor, min(float(value), 1.0))
 
 
 def run_scaling_analysis():
