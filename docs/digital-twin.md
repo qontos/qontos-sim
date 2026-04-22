@@ -41,6 +41,18 @@ That lets us ask software-side architecture questions like:
 - how much Bell-pair buffering changes modular latency
 - whether the seam is protocol-limited or entanglement-supply-limited
 
+The transduction side now also has explicit quality controls:
+
+- `transduction_calibration_quality`: how well the transducer is tuned to its nominal target
+- `link_phase_stability`: how stable the microwave-to-optical link stays under operation
+
+Those knobs feed directly into:
+
+- effective transduction efficiency
+- retry-adjusted link fidelity
+- link margin versus the `TARGET` operating point
+- the split between a supply bottleneck and a transduction-link bottleneck
+
 ## Key Concepts
 
 ### Modular Architecture
@@ -98,6 +110,10 @@ print(f"Bell pairs:      {result.bell_pairs_needed}")
 print(f"Effective depth: {result.effective_circuit_depth}")
 print(f"Band:            {result.degradation_band}")
 print(f"Link quality:    {result.link_quality:.3f}")
+print(f"Link margin:     {result.link_margin_to_target:.2f}x")
+print(f"Link fidelity*:  {result.retry_adjusted_link_fidelity:.3f}")
+print(f"Calibration:     {result.transduction_calibration_quality:.2f}")
+print(f"Phase stability: {result.link_phase_stability:.2f}")
 print(f"Bell attempts:   {result.expected_attempts_per_bell_pair:.2f}")
 print(f"Parallel links:  {result.entanglement_parallel_links}")
 print(f"Buffered pairs:  {result.buffered_bell_pairs_used}")

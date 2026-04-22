@@ -46,6 +46,8 @@ class TestSystemConfig:
     def test_new_hybrid_knobs_exist(self):
         cfg = SystemConfig(
             transduction_loss=0.1,
+            transduction_calibration_quality=0.85,
+            link_phase_stability=0.8,
             added_noise=0.05,
             bell_pair_retry_rate=1.5,
             entanglement_parallel_links=3,
@@ -54,6 +56,8 @@ class TestSystemConfig:
             control_jitter_us=3.0,
         )
         assert cfg.transduction_loss == 0.1
+        assert cfg.transduction_calibration_quality == 0.85
+        assert cfg.link_phase_stability == 0.8
         assert cfg.added_noise == 0.05
         assert cfg.bell_pair_retry_rate == 1.5
         assert cfg.entanglement_parallel_links == 3
@@ -91,6 +95,10 @@ class TestSimulateWorkloadFields:
         assert isinstance(result.degradation_band, str)
         assert isinstance(result.effective_transduction_efficiency, float)
         assert isinstance(result.link_quality, float)
+        assert isinstance(result.link_margin_to_target, float)
+        assert isinstance(result.retry_adjusted_link_fidelity, float)
+        assert isinstance(result.transduction_calibration_quality, float)
+        assert isinstance(result.link_phase_stability, float)
         assert isinstance(result.expected_attempts_per_bell_pair, float)
         assert isinstance(result.entanglement_parallel_links, int)
         assert isinstance(result.entanglement_buffer_pairs, int)
@@ -198,7 +206,7 @@ class TestTransductionBands:
     def test_simulation_result_band(self):
         cfg = SystemConfig(transduction_efficiency=0.25)
         result = simulate_workload(cfg, circuit_depth=50)
-        assert result.degradation_band == "STRETCH"
+        assert result.degradation_band == "TARGET"
 
 
 # ===================================================================
@@ -337,6 +345,48 @@ class TestHybridKnobSensitivity:
         )
         assert noisy.added_noise_penalty > clean.added_noise_penalty
         assert noisy.estimated_fidelity < clean.estimated_fidelity
+
+    def test_calibration_quality_improves_link_margin(self):
+        weak = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.15,
+                transduction_calibration_quality=0.7,
+            ),
+            circuit_depth=50,
+        )
+        strong = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.15,
+                transduction_calibration_quality=1.0,
+            ),
+            circuit_depth=50,
+        )
+        assert strong.effective_transduction_efficiency > weak.effective_transduction_efficiency
+        assert strong.link_margin_to_target > weak.link_margin_to_target
+        assert strong.retry_adjusted_link_fidelity > weak.retry_adjusted_link_fidelity
+
+    def test_phase_stability_reduces_retry_pressure(self):
+        unstable = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.15,
+                link_phase_stability=0.7,
+            ),
+            circuit_depth=50,
+        )
+        stable = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.15,
+                link_phase_stability=1.0,
+            ),
+            circuit_depth=50,
+        )
+        assert stable.expected_attempts_per_bell_pair < unstable.expected_attempts_per_bell_pair
+        assert stable.retry_adjusted_link_fidelity > unstable.retry_adjusted_link_fidelity
+        assert stable.link_quality > unstable.link_quality
 
     def test_dominant_bottleneck_tracks_memory_wait_stress(self):
         stressed = simulate_workload(

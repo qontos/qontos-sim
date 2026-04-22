@@ -31,6 +31,8 @@ class SystemConfig:
     module: ModuleConfig = None
     transduction_efficiency: float = 0.15  # target from whitepaper
     transduction_loss: float = 0.0
+    transduction_calibration_quality: float = 1.0
+    link_phase_stability: float = 1.0
     added_noise: float = 0.02
     bell_pair_rate_hz: float = 3000
     bell_pair_retry_rate: float = 1.0
@@ -65,6 +67,10 @@ class SimulationResult:
     degradation_band: str  # STRETCH, TARGET, FALLBACK, MINIMUM
     effective_transduction_efficiency: float
     link_quality: float
+    link_margin_to_target: float
+    retry_adjusted_link_fidelity: float
+    transduction_calibration_quality: float
+    link_phase_stability: float
     expected_attempts_per_bell_pair: float
     entanglement_parallel_links: int
     entanglement_buffer_pairs: int
@@ -149,14 +155,34 @@ def simulate_workload(
     f_2q = config.module.gate_fidelity_2q
     one_q_gates = total_gates - two_q_gates
 
-    effective_efficiency = max(
-        0.01,
-        config.transduction_efficiency * (1.0 - max(0.0, min(config.transduction_loss, 0.99))),
+    calibration_quality = max(
+        0.4,
+        min(float(config.transduction_calibration_quality), 1.0),
     )
+    phase_stability = max(
+        0.4,
+        min(float(config.link_phase_stability), 1.0),
+    )
+    nominal_efficiency = config.transduction_efficiency * (1.0 - max(0.0, min(config.transduction_loss, 0.99)))
+    effective_efficiency = max(0.01, nominal_efficiency * calibration_quality)
 
-    # Inter-module fidelity proxy (depends on transduction and noise)
-    added_noise_penalty = max(0.0, min(config.added_noise, 0.5))
-    inter_module_gate_fidelity = min(0.99, max(0.01, effective_efficiency * 2 - added_noise_penalty))
+    # Inter-module fidelity proxy (depends on transduction, calibration, and phase stability)
+    added_noise_penalty = max(
+        0.0,
+        min(
+            config.added_noise
+            + (1.0 - phase_stability) * 0.12
+            + (1.0 - calibration_quality) * 0.05,
+            0.5,
+        ),
+    )
+    inter_module_gate_fidelity = min(
+        0.99,
+        max(
+            0.01,
+            effective_efficiency * 2 * phase_stability - added_noise_penalty,
+        ),
+    )
 
     one_qubit_runtime = one_q_gates * config.module.gate_time_1q_ns / 1000
     intra_module_two_qubit_runtime = (
@@ -167,10 +193,16 @@ def simulate_workload(
     # raw efficiency to avoid double-counting transduction penalties.
     link_quality = max(
         0.02,
-        effective_efficiency * max(0.1, 1.0 - added_noise_penalty),
+        effective_efficiency * phase_stability * max(0.1, 1.0 - added_noise_penalty),
     )
+    link_margin_to_target = link_quality / TARGET_LINK_QUALITY
     link_penalty_factor = max(1.0, TARGET_LINK_QUALITY / link_quality)
-    retry_multiplier = max(1.0, config.bell_pair_retry_rate)
+    retry_multiplier = max(
+        1.0,
+        config.bell_pair_retry_rate
+        * (1.0 + (1.0 - phase_stability) * 0.8 + (1.0 - calibration_quality) * 0.35),
+    )
+    retry_adjusted_link_fidelity = inter_module_gate_fidelity / retry_multiplier
     expected_attempts_per_bell_pair = link_penalty_factor * retry_multiplier
     parallel_links = max(1, int(config.entanglement_parallel_links))
     buffered_bell_pairs_used = min(
@@ -271,7 +303,7 @@ def simulate_workload(
         key=lambda name: bottleneck_scores[name],
     )
 
-    band, _ = classify_degradation(effective_efficiency)
+    band, _ = classify_degradation(link_quality)
 
     return SimulationResult(
         config=config,
@@ -287,6 +319,10 @@ def simulate_workload(
         degradation_band=band,
         effective_transduction_efficiency=effective_efficiency,
         link_quality=link_quality,
+        link_margin_to_target=link_margin_to_target,
+        retry_adjusted_link_fidelity=retry_adjusted_link_fidelity,
+        transduction_calibration_quality=calibration_quality,
+        link_phase_stability=phase_stability,
         expected_attempts_per_bell_pair=expected_attempts_per_bell_pair,
         entanglement_parallel_links=parallel_links,
         entanglement_buffer_pairs=max(0, int(config.entanglement_buffer_pairs)),
