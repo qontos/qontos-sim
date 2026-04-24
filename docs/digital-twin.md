@@ -18,6 +18,9 @@ It now also exposes a hybrid bottleneck decomposition so teams can see whether
 the seam is currently limited by:
 
 - base transduction-link runtime
+- converter setup overhead
+- converter drift stabilization overhead
+- converter bandwidth caps
 - retry overhead from Bell-pair instability
 - phase-lock reacquisition overhead
 - detector dead-time overhead
@@ -46,6 +49,10 @@ That lets us ask software-side architecture questions like:
 The transduction side now also has explicit quality controls:
 
 - `transduction_calibration_quality`: how well the transducer is tuned to its nominal target
+- `transduction_setup_time_us`: per-operation converter setup latency before the link can run
+- `transduction_drift_probability`: probability that conversion drift forces extra retry/stabilization pressure
+- `transduction_stabilization_time_us`: recovery time paid when conversion drift is modeled
+- `transduction_bandwidth_limit_hz`: optional per-lane Bell-pair supply cap from converter bandwidth
 - `optical_coupling_efficiency`: how much of the converted optical signal survives into the link
 - `heralding_success_probability`: how often the photonic detection path successfully declares a usable Bell event
 - `detector_efficiency`: how much detector loss the photonic receive path pays
@@ -61,6 +68,9 @@ Those knobs feed directly into:
 - transduction channel efficiency before dynamic phase/noise penalties
 - effective transduction efficiency
 - weakest channel-component margin versus the nominal target stack
+- transduction setup and drift-stabilization runtime overhead
+- uncapped versus bandwidth-capped Bell-pair supply rate
+- converter bandwidth utilization and cap status
 - detector false-positive penalty from dark counts
 - detector dead-time overhead
 - phase-lock slip probability and reference stability
@@ -128,6 +138,12 @@ print(f"Effective depth: {result.effective_circuit_depth}")
 print(f"Band:            {result.degradation_band}")
 print(f"Channel eff.:    {result.transduction_channel_efficiency:.3f}")
 print(f"Channel margin:  {result.channel_margin_to_target:.2f}x")
+print(f"Tx setup:        {result.transduction_setup_overhead_us:.1f} us")
+print(f"Tx drift:        {result.transduction_drift_probability:.3f}")
+print(f"Tx stabilize:    {result.transduction_stabilization_overhead_us:.1f} us")
+print(f"Tx bw cap:       {result.transduction_bandwidth_limit_hz:.1f} Hz")
+print(f"Tx bw capped:    {result.transduction_bandwidth_capped}")
+print(f"Tx bw util.:     {result.transduction_bandwidth_utilization:.2f}")
 print(f"Link quality:    {result.link_quality:.3f}")
 print(f"Link stability:  {result.dynamic_link_stability:.3f}")
 print(f"Link margin:     {result.link_margin_to_target:.2f}x")

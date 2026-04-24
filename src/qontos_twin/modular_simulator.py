@@ -32,6 +32,10 @@ class SystemConfig:
     transduction_efficiency: float = 0.15  # target from whitepaper
     transduction_loss: float = 0.0
     transduction_calibration_quality: float = 1.0
+    transduction_setup_time_us: float = 0.0
+    transduction_drift_probability: float = 0.0
+    transduction_stabilization_time_us: float = 0.0
+    transduction_bandwidth_limit_hz: float = 0.0
     optical_coupling_efficiency: float = 1.0
     heralding_success_probability: float = 1.0
     detector_efficiency: float = 1.0
@@ -81,6 +85,13 @@ class SimulationResult:
     link_margin_to_target: float
     retry_adjusted_link_fidelity: float
     transduction_calibration_quality: float
+    transduction_setup_overhead_us: float
+    transduction_drift_probability: float
+    transduction_stabilization_overhead_us: float
+    transduction_bandwidth_limit_hz: float
+    transduction_bandwidth_capped: bool
+    transduction_bandwidth_utilization: float
+    uncapped_effective_bell_pair_rate_hz: float
     optical_coupling_efficiency: float
     heralding_success_probability: float
     detector_efficiency: float
@@ -191,6 +202,8 @@ def simulate_workload(
     one_q_gates = total_gates - two_q_gates
 
     calibration_quality = _unit_interval(config.transduction_calibration_quality, floor=0.4)
+    transduction_drift_probability = _bounded_probability(config.transduction_drift_probability)
+    transduction_bandwidth_limit_hz = max(0.0, float(config.transduction_bandwidth_limit_hz))
     optical_coupling = _unit_interval(config.optical_coupling_efficiency, floor=0.4)
     heralding_success = _unit_interval(config.heralding_success_probability, floor=0.4)
     detector_efficiency = _unit_interval(config.detector_efficiency, floor=0.4)
@@ -250,6 +263,7 @@ def simulate_workload(
         0.0,
         min(
             config.added_noise
+            + transduction_drift_probability * 0.10
             + (1.0 - phase_stability) * 0.12
             + (1.0 - phase_lock_reference_stability) * 0.08
             + (1.0 - calibration_quality) * 0.05,
@@ -261,6 +275,7 @@ def simulate_workload(
         phase_lock_duty_cycle
         * phase_stability
         * phase_lock_reference_stability
+        * (1.0 - transduction_drift_probability * 0.25)
         * max(0.1, 1.0 - added_noise_penalty)
     )
     inter_module_gate_fidelity = min(
@@ -294,6 +309,7 @@ def simulate_workload(
             + (1.0 - phase_stability) * 0.8
             + (1.0 - phase_lock_duty_cycle) * 0.55
             + phase_lock_slip_probability * 0.45
+            + transduction_drift_probability * 0.6
             + (1.0 - calibration_quality) * 0.35
             + (1.0 - heralding_success) * 0.3
             + detector_dark_count_probability * 0.4
@@ -311,9 +327,27 @@ def simulate_workload(
     protocol_link_runtime = (
         inter_module_gates * config.inter_module_gate_time_us * link_penalty_factor
     )
-    effective_bell_pair_rate_hz = max(
+    uncapped_effective_bell_pair_rate_hz = max(
         1.0,
         (config.bell_pair_rate_hz * parallel_links) / expected_attempts_per_bell_pair,
+    )
+    bandwidth_capped_rate_hz = (
+        max(1.0, (transduction_bandwidth_limit_hz * parallel_links) / expected_attempts_per_bell_pair)
+        if transduction_bandwidth_limit_hz > 0.0
+        else uncapped_effective_bell_pair_rate_hz
+    )
+    effective_bell_pair_rate_hz = min(
+        uncapped_effective_bell_pair_rate_hz,
+        bandwidth_capped_rate_hz,
+    )
+    transduction_bandwidth_capped = (
+        transduction_bandwidth_limit_hz > 0.0
+        and bandwidth_capped_rate_hz < uncapped_effective_bell_pair_rate_hz
+    )
+    transduction_bandwidth_utilization = (
+        uncapped_effective_bell_pair_rate_hz / max(bandwidth_capped_rate_hz, 1e-9)
+        if transduction_bandwidth_limit_hz > 0.0
+        else 0.0
     )
     entanglement_supply_time_us = (
         (supply_pairs_needed / effective_bell_pair_rate_hz) * 1_000_000.0
@@ -333,6 +367,16 @@ def simulate_workload(
         else 0.0
     )
 
+    transduction_setup_overhead = (
+        inter_module_gates
+        * max(0.0, float(config.transduction_setup_time_us))
+        * link_penalty_factor
+    )
+    transduction_stabilization_overhead = (
+        inter_module_gates
+        * transduction_drift_probability
+        * max(0.0, float(config.transduction_stabilization_time_us))
+    )
     retry_overhead = (
         inter_module_gates
         * config.inter_module_gate_time_us
@@ -353,6 +397,8 @@ def simulate_workload(
     control_jitter_overhead = inter_module_gates * config.control_jitter_us
     interconnect_runtime = (
         base_interconnect_runtime
+        + transduction_setup_overhead
+        + transduction_stabilization_overhead
         + retry_overhead
         + phase_lock_reacquisition_overhead
         + detector_dead_time_overhead
@@ -387,7 +433,8 @@ def simulate_workload(
 
     # Effective depth increase from inter-module serialization
     retry_depth_penalty = int(inter_module_gates * max(0.0, config.bell_pair_retry_rate - 1.0))
-    effective_depth = circuit_depth + inter_module_gates + retry_depth_penalty
+    drift_depth_penalty = int(inter_module_gates * transduction_drift_probability)
+    effective_depth = circuit_depth + inter_module_gates + retry_depth_penalty + drift_depth_penalty
     throughput_ops_per_sec = (
         (total_gates / total_time_us) * 1_000_000 if total_time_us > 0.0 else 0.0
     )
@@ -396,6 +443,8 @@ def simulate_workload(
         "one_qubit": one_qubit_runtime,
         "intra_module_two_qubit": intra_module_two_qubit_runtime,
         "transduction_link": protocol_link_runtime,
+        "transduction_setup": transduction_setup_overhead,
+        "transduction_stabilization": transduction_stabilization_overhead,
         "entanglement_supply": supply_queue_overhead,
         "retry": retry_overhead,
         "phase_lock": phase_lock_reacquisition_overhead,
@@ -408,6 +457,7 @@ def simulate_workload(
         runtime_breakdown=runtime_breakdown,
         decoherence_penalty=decoherence_penalty,
         entanglement_supply_utilization=entanglement_supply_utilization,
+        transduction_bandwidth_utilization=transduction_bandwidth_utilization,
     )
     dominant_bottleneck = max(
         {name: score for name, score in bottleneck_scores.items() if name != "decoherence"},
@@ -436,6 +486,13 @@ def simulate_workload(
         link_margin_to_target=link_margin_to_target,
         retry_adjusted_link_fidelity=retry_adjusted_link_fidelity,
         transduction_calibration_quality=calibration_quality,
+        transduction_setup_overhead_us=transduction_setup_overhead,
+        transduction_drift_probability=transduction_drift_probability,
+        transduction_stabilization_overhead_us=transduction_stabilization_overhead,
+        transduction_bandwidth_limit_hz=transduction_bandwidth_limit_hz,
+        transduction_bandwidth_capped=transduction_bandwidth_capped,
+        transduction_bandwidth_utilization=transduction_bandwidth_utilization,
+        uncapped_effective_bell_pair_rate_hz=uncapped_effective_bell_pair_rate_hz,
         optical_coupling_efficiency=optical_coupling,
         heralding_success_probability=heralding_success,
         detector_efficiency=detector_efficiency,
@@ -476,18 +533,23 @@ def _bottleneck_scores(
     runtime_breakdown: dict[str, float],
     decoherence_penalty: float,
     entanglement_supply_utilization: float,
+    transduction_bandwidth_utilization: float = 0.0,
 ) -> dict[str, float]:
     denominator = max(total_time_us, 1e-9)
+    bandwidth_score = max(0.0, min(1.0, transduction_bandwidth_utilization - 1.0))
     return {
         "intra_module_runtime": (
             runtime_breakdown["one_qubit"] + runtime_breakdown["intra_module_two_qubit"]
         )
         / denominator,
         "transduction_link": runtime_breakdown["transduction_link"] / denominator,
+        "transduction_setup": runtime_breakdown["transduction_setup"] / denominator,
+        "transduction_stabilization": runtime_breakdown["transduction_stabilization"] / denominator,
         "entanglement_supply": max(
             runtime_breakdown["entanglement_supply"] / denominator,
             min(1.0, entanglement_supply_utilization),
         ),
+        "transduction_bandwidth": bandwidth_score,
         "retry": runtime_breakdown["retry"] / denominator,
         "phase_lock": runtime_breakdown["phase_lock"] / denominator,
         "detector": runtime_breakdown["detector"] / denominator,

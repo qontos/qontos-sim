@@ -47,6 +47,10 @@ class TestSystemConfig:
         cfg = SystemConfig(
             transduction_loss=0.1,
             transduction_calibration_quality=0.85,
+            transduction_setup_time_us=4.0,
+            transduction_drift_probability=0.03,
+            transduction_stabilization_time_us=50.0,
+            transduction_bandwidth_limit_hz=20_000.0,
             optical_coupling_efficiency=0.8,
             heralding_success_probability=0.75,
             detector_efficiency=0.9,
@@ -65,6 +69,10 @@ class TestSystemConfig:
         )
         assert cfg.transduction_loss == 0.1
         assert cfg.transduction_calibration_quality == 0.85
+        assert cfg.transduction_setup_time_us == 4.0
+        assert cfg.transduction_drift_probability == 0.03
+        assert cfg.transduction_stabilization_time_us == 50.0
+        assert cfg.transduction_bandwidth_limit_hz == 20_000.0
         assert cfg.optical_coupling_efficiency == 0.8
         assert cfg.heralding_success_probability == 0.75
         assert cfg.detector_efficiency == 0.9
@@ -117,6 +125,13 @@ class TestSimulateWorkloadFields:
         assert isinstance(result.link_margin_to_target, float)
         assert isinstance(result.retry_adjusted_link_fidelity, float)
         assert isinstance(result.transduction_calibration_quality, float)
+        assert isinstance(result.transduction_setup_overhead_us, float)
+        assert isinstance(result.transduction_drift_probability, float)
+        assert isinstance(result.transduction_stabilization_overhead_us, float)
+        assert isinstance(result.transduction_bandwidth_limit_hz, float)
+        assert isinstance(result.transduction_bandwidth_capped, bool)
+        assert isinstance(result.transduction_bandwidth_utilization, float)
+        assert isinstance(result.uncapped_effective_bell_pair_rate_hz, float)
         assert isinstance(result.optical_coupling_efficiency, float)
         assert isinstance(result.heralding_success_probability, float)
         assert isinstance(result.detector_efficiency, float)
@@ -348,6 +363,70 @@ class TestHybridKnobSensitivity:
         assert lossy.effective_transduction_efficiency < baseline.effective_transduction_efficiency
         assert lossy.link_quality < baseline.link_quality
         assert lossy.inter_module_latency_us > baseline.inter_module_latency_us
+
+    def test_transduction_setup_and_drift_raise_link_latency(self):
+        baseline = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.18,
+                entanglement_parallel_links=8,
+                entanglement_buffer_pairs=1024,
+            ),
+            circuit_depth=80,
+        )
+        stressed = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.18,
+                entanglement_parallel_links=8,
+                entanglement_buffer_pairs=1024,
+                transduction_setup_time_us=25.0,
+                transduction_drift_probability=0.05,
+                transduction_stabilization_time_us=200.0,
+            ),
+            circuit_depth=80,
+        )
+        assert stressed.transduction_setup_overhead_us > 0.0
+        assert stressed.transduction_stabilization_overhead_us > 0.0
+        assert stressed.runtime_breakdown_us["transduction_setup"] == pytest.approx(
+            stressed.transduction_setup_overhead_us
+        )
+        assert stressed.runtime_breakdown_us["transduction_stabilization"] == pytest.approx(
+            stressed.transduction_stabilization_overhead_us
+        )
+        assert stressed.expected_attempts_per_bell_pair > baseline.expected_attempts_per_bell_pair
+        assert stressed.dynamic_link_stability < baseline.dynamic_link_stability
+        assert stressed.inter_module_latency_us > baseline.inter_module_latency_us
+        assert stressed.effective_circuit_depth > baseline.effective_circuit_depth
+
+    def test_transduction_bandwidth_cap_reduces_effective_bell_pair_rate(self):
+        baseline = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.18,
+                entanglement_parallel_links=8,
+                entanglement_buffer_pairs=0,
+            ),
+            circuit_depth=80,
+        )
+        capped = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.18,
+                entanglement_parallel_links=8,
+                entanglement_buffer_pairs=0,
+                transduction_bandwidth_limit_hz=1_500.0,
+            ),
+            circuit_depth=80,
+        )
+        assert capped.transduction_bandwidth_capped is True
+        assert capped.uncapped_effective_bell_pair_rate_hz == pytest.approx(
+            baseline.effective_bell_pair_rate_hz
+        )
+        assert capped.effective_bell_pair_rate_hz < baseline.effective_bell_pair_rate_hz
+        assert capped.transduction_bandwidth_utilization > 1.0
+        assert capped.entanglement_supply_time_us > baseline.entanglement_supply_time_us
+        assert capped.bottleneck_scores["transduction_bandwidth"] > 0.0
 
     def test_retry_and_wait_penalties_increase_latency(self):
         baseline = simulate_workload(SystemConfig(num_modules=4), circuit_depth=100)
