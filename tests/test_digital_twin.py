@@ -50,7 +50,11 @@ class TestSystemConfig:
             optical_coupling_efficiency=0.8,
             heralding_success_probability=0.75,
             detector_efficiency=0.9,
+            detector_dark_count_probability=0.02,
+            detector_dead_time_us=1.5,
             phase_lock_duty_cycle=0.88,
+            phase_lock_reacquisition_time_us=15.0,
+            phase_lock_reference_jitter_us=2.0,
             link_phase_stability=0.8,
             added_noise=0.05,
             bell_pair_retry_rate=1.5,
@@ -64,7 +68,11 @@ class TestSystemConfig:
         assert cfg.optical_coupling_efficiency == 0.8
         assert cfg.heralding_success_probability == 0.75
         assert cfg.detector_efficiency == 0.9
+        assert cfg.detector_dark_count_probability == 0.02
+        assert cfg.detector_dead_time_us == 1.5
         assert cfg.phase_lock_duty_cycle == 0.88
+        assert cfg.phase_lock_reacquisition_time_us == 15.0
+        assert cfg.phase_lock_reference_jitter_us == 2.0
         assert cfg.link_phase_stability == 0.8
         assert cfg.added_noise == 0.05
         assert cfg.bell_pair_retry_rate == 1.5
@@ -112,7 +120,13 @@ class TestSimulateWorkloadFields:
         assert isinstance(result.optical_coupling_efficiency, float)
         assert isinstance(result.heralding_success_probability, float)
         assert isinstance(result.detector_efficiency, float)
+        assert isinstance(result.detector_dark_count_probability, float)
+        assert isinstance(result.detector_false_positive_penalty, float)
+        assert isinstance(result.detector_dead_time_overhead_us, float)
         assert isinstance(result.phase_lock_duty_cycle, float)
+        assert isinstance(result.phase_lock_slip_probability, float)
+        assert isinstance(result.phase_lock_reference_stability, float)
+        assert isinstance(result.phase_lock_reacquisition_overhead_us, float)
         assert isinstance(result.link_phase_stability, float)
         assert isinstance(result.channel_component_values, dict)
         assert isinstance(result.channel_component_margins, dict)
@@ -452,6 +466,70 @@ class TestHybridKnobSensitivity:
         assert weak.weakest_channel_component == "phase_lock"
         assert strong.dynamic_link_stability > weak.dynamic_link_stability
         assert strong.retry_adjusted_link_fidelity > weak.retry_adjusted_link_fidelity
+
+    def test_phase_lock_reacquisition_and_jitter_raise_visible_pressure(self):
+        baseline = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.18,
+                entanglement_parallel_links=8,
+                entanglement_buffer_pairs=1024,
+            ),
+            circuit_depth=80,
+        )
+        stressed = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.18,
+                entanglement_parallel_links=8,
+                entanglement_buffer_pairs=1024,
+                phase_lock_duty_cycle=0.85,
+                phase_lock_reacquisition_time_us=500.0,
+                phase_lock_reference_jitter_us=5.0,
+            ),
+            circuit_depth=80,
+        )
+        assert stressed.phase_lock_slip_probability > baseline.phase_lock_slip_probability
+        assert stressed.phase_lock_reference_stability < baseline.phase_lock_reference_stability
+        assert stressed.phase_lock_reacquisition_overhead_us > 0.0
+        assert stressed.runtime_breakdown_us["phase_lock"] == pytest.approx(
+            stressed.phase_lock_reacquisition_overhead_us
+        )
+        assert stressed.bottleneck_scores["phase_lock"] > baseline.bottleneck_scores["phase_lock"]
+        assert stressed.inter_module_latency_us > baseline.inter_module_latency_us
+        assert stressed.estimated_fidelity < baseline.estimated_fidelity
+
+    def test_detector_dark_counts_and_dead_time_raise_visible_pressure(self):
+        baseline = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.18,
+                entanglement_parallel_links=8,
+                entanglement_buffer_pairs=1024,
+            ),
+            circuit_depth=80,
+        )
+        stressed = simulate_workload(
+            SystemConfig(
+                num_modules=4,
+                transduction_efficiency=0.18,
+                entanglement_parallel_links=8,
+                entanglement_buffer_pairs=1024,
+                detector_efficiency=0.92,
+                detector_dark_count_probability=0.04,
+                detector_dead_time_us=50.0,
+            ),
+            circuit_depth=80,
+        )
+        assert stressed.detector_dark_count_probability == pytest.approx(0.04)
+        assert stressed.detector_false_positive_penalty > baseline.detector_false_positive_penalty
+        assert stressed.detector_dead_time_overhead_us > 0.0
+        assert stressed.runtime_breakdown_us["detector"] == pytest.approx(
+            stressed.detector_dead_time_overhead_us
+        )
+        assert stressed.bottleneck_scores["detector"] > baseline.bottleneck_scores["detector"]
+        assert stressed.added_noise_penalty > baseline.added_noise_penalty
+        assert stressed.estimated_fidelity < baseline.estimated_fidelity
 
     def test_phase_stability_reduces_retry_pressure(self):
         unstable = simulate_workload(

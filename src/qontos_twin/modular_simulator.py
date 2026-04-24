@@ -35,7 +35,11 @@ class SystemConfig:
     optical_coupling_efficiency: float = 1.0
     heralding_success_probability: float = 1.0
     detector_efficiency: float = 1.0
+    detector_dark_count_probability: float = 0.0
+    detector_dead_time_us: float = 0.0
     phase_lock_duty_cycle: float = 1.0
+    phase_lock_reacquisition_time_us: float = 0.0
+    phase_lock_reference_jitter_us: float = 0.0
     link_phase_stability: float = 1.0
     added_noise: float = 0.02
     bell_pair_rate_hz: float = 3000
@@ -80,7 +84,13 @@ class SimulationResult:
     optical_coupling_efficiency: float
     heralding_success_probability: float
     detector_efficiency: float
+    detector_dark_count_probability: float
+    detector_false_positive_penalty: float
+    detector_dead_time_overhead_us: float
     phase_lock_duty_cycle: float
+    phase_lock_slip_probability: float
+    phase_lock_reference_stability: float
+    phase_lock_reacquisition_overhead_us: float
     link_phase_stability: float
     channel_component_values: dict[str, float]
     channel_component_margins: dict[str, float]
@@ -184,8 +194,23 @@ def simulate_workload(
     optical_coupling = _unit_interval(config.optical_coupling_efficiency, floor=0.4)
     heralding_success = _unit_interval(config.heralding_success_probability, floor=0.4)
     detector_efficiency = _unit_interval(config.detector_efficiency, floor=0.4)
+    detector_dark_count_probability = _bounded_probability(config.detector_dark_count_probability)
     phase_lock_duty_cycle = _unit_interval(config.phase_lock_duty_cycle, floor=0.4)
+    phase_lock_reference_jitter_us = max(0.0, float(config.phase_lock_reference_jitter_us))
     phase_stability = _unit_interval(config.link_phase_stability, floor=0.4)
+    phase_lock_reference_stability = _phase_lock_reference_stability(
+        reference_jitter_us=phase_lock_reference_jitter_us,
+        inter_module_gate_time_us=config.inter_module_gate_time_us,
+    )
+    phase_lock_slip_probability = _phase_lock_slip_probability(
+        duty_cycle=phase_lock_duty_cycle,
+        reference_jitter_us=phase_lock_reference_jitter_us,
+        inter_module_gate_time_us=config.inter_module_gate_time_us,
+    )
+    detector_false_positive_penalty = _detector_false_positive_penalty(
+        dark_count_probability=detector_dark_count_probability,
+        detector_efficiency=detector_efficiency,
+    )
     nominal_efficiency = config.transduction_efficiency * (
         1.0 - max(0.0, min(config.transduction_loss, 0.99))
     )
@@ -226,13 +251,16 @@ def simulate_workload(
         min(
             config.added_noise
             + (1.0 - phase_stability) * 0.12
+            + (1.0 - phase_lock_reference_stability) * 0.08
             + (1.0 - calibration_quality) * 0.05,
             0.5,
         ),
     )
+    added_noise_penalty = min(0.5, added_noise_penalty + detector_false_positive_penalty)
     dynamic_link_stability = (
         phase_lock_duty_cycle
         * phase_stability
+        * phase_lock_reference_stability
         * max(0.1, 1.0 - added_noise_penalty)
     )
     inter_module_gate_fidelity = min(
@@ -265,8 +293,10 @@ def simulate_workload(
             1.0
             + (1.0 - phase_stability) * 0.8
             + (1.0 - phase_lock_duty_cycle) * 0.55
+            + phase_lock_slip_probability * 0.45
             + (1.0 - calibration_quality) * 0.35
             + (1.0 - heralding_success) * 0.3
+            + detector_dark_count_probability * 0.4
         ),
     )
     retry_adjusted_link_fidelity = inter_module_gate_fidelity / retry_multiplier
@@ -309,11 +339,23 @@ def simulate_workload(
         * link_penalty_factor
         * max(0.0, retry_multiplier - 1.0)
     )
+    phase_lock_reacquisition_overhead = (
+        inter_module_gates
+        * phase_lock_slip_probability
+        * max(0.0, float(config.phase_lock_reacquisition_time_us))
+    )
+    detector_dead_time_overhead = (
+        inter_module_gates
+        * max(0.0, float(config.detector_dead_time_us))
+        * _detector_dead_time_pressure(detector_efficiency, detector_dark_count_probability)
+    )
     memory_wait_overhead = inter_module_gates * config.memory_wait_time_us
     control_jitter_overhead = inter_module_gates * config.control_jitter_us
     interconnect_runtime = (
         base_interconnect_runtime
         + retry_overhead
+        + phase_lock_reacquisition_overhead
+        + detector_dead_time_overhead
         + memory_wait_overhead
         + control_jitter_overhead
     )
@@ -356,6 +398,8 @@ def simulate_workload(
         "transduction_link": protocol_link_runtime,
         "entanglement_supply": supply_queue_overhead,
         "retry": retry_overhead,
+        "phase_lock": phase_lock_reacquisition_overhead,
+        "detector": detector_dead_time_overhead,
         "memory_wait": memory_wait_overhead,
         "control_jitter": control_jitter_overhead,
     }
@@ -395,7 +439,13 @@ def simulate_workload(
         optical_coupling_efficiency=optical_coupling,
         heralding_success_probability=heralding_success,
         detector_efficiency=detector_efficiency,
+        detector_dark_count_probability=detector_dark_count_probability,
+        detector_false_positive_penalty=detector_false_positive_penalty,
+        detector_dead_time_overhead_us=detector_dead_time_overhead,
         phase_lock_duty_cycle=phase_lock_duty_cycle,
+        phase_lock_slip_probability=phase_lock_slip_probability,
+        phase_lock_reference_stability=phase_lock_reference_stability,
+        phase_lock_reacquisition_overhead_us=phase_lock_reacquisition_overhead,
         link_phase_stability=phase_stability,
         channel_component_values=channel_component_values,
         channel_component_margins=channel_component_margins,
@@ -439,6 +489,8 @@ def _bottleneck_scores(
             min(1.0, entanglement_supply_utilization),
         ),
         "retry": runtime_breakdown["retry"] / denominator,
+        "phase_lock": runtime_breakdown["phase_lock"] / denominator,
+        "detector": runtime_breakdown["detector"] / denominator,
         "memory_wait": runtime_breakdown["memory_wait"] / denominator,
         "control_jitter": runtime_breakdown["control_jitter"] / denominator,
         "decoherence": min(1.0, decoherence_penalty),
@@ -449,6 +501,56 @@ def _unit_interval(value: float, *, floor: float = 0.0) -> float:
     """Clamp a floating-point quality term into a safe unit interval."""
 
     return max(floor, min(float(value), 1.0))
+
+
+def _bounded_probability(value: float) -> float:
+    """Clamp an explicit probability-like hardware knob into [0, 1]."""
+
+    return max(0.0, min(float(value), 1.0))
+
+
+def _phase_lock_reference_stability(
+    *,
+    reference_jitter_us: float,
+    inter_module_gate_time_us: float,
+) -> float:
+    """Convert reference jitter into a bounded phase-lock stability term."""
+
+    timing_window_us = max(1.0, float(inter_module_gate_time_us))
+    return max(0.4, 1.0 - (max(0.0, reference_jitter_us) / timing_window_us))
+
+
+def _phase_lock_slip_probability(
+    *,
+    duty_cycle: float,
+    reference_jitter_us: float,
+    inter_module_gate_time_us: float,
+) -> float:
+    """Estimate the probability that a link operation pays phase reacquisition."""
+
+    timing_window_us = max(1.0, float(inter_module_gate_time_us))
+    jitter_pressure = max(0.0, reference_jitter_us) / timing_window_us
+    return min(0.8, max(0.0, 1.0 - duty_cycle) + jitter_pressure * 0.25)
+
+
+def _detector_false_positive_penalty(
+    *,
+    dark_count_probability: float,
+    detector_efficiency: float,
+) -> float:
+    """Estimate the added-noise penalty from photonic dark counts."""
+
+    inefficiency_pressure = max(0.0, 1.0 - detector_efficiency)
+    return min(0.25, dark_count_probability * (1.0 + inefficiency_pressure * 0.5))
+
+
+def _detector_dead_time_pressure(
+    detector_efficiency: float,
+    dark_count_probability: float,
+) -> float:
+    """Scale detector dead-time by loss and false-event pressure."""
+
+    return 1.0 + max(0.0, 1.0 - detector_efficiency) + dark_count_probability
 
 
 def run_scaling_analysis():

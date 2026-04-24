@@ -19,6 +19,8 @@ the seam is currently limited by:
 
 - base transduction-link runtime
 - retry overhead from Bell-pair instability
+- phase-lock reacquisition overhead
+- detector dead-time overhead
 - memory wait accumulation
 - control jitter accumulation
 - decoherence pressure
@@ -47,7 +49,11 @@ The transduction side now also has explicit quality controls:
 - `optical_coupling_efficiency`: how much of the converted optical signal survives into the link
 - `heralding_success_probability`: how often the photonic detection path successfully declares a usable Bell event
 - `detector_efficiency`: how much detector loss the photonic receive path pays
+- `detector_dark_count_probability`: how much false-event pressure the receive path adds
+- `detector_dead_time_us`: how much per-event detector recovery time is exposed to the interconnect
 - `phase_lock_duty_cycle`: how much of the operating window stays phase-locked instead of falling back into reacquisition
+- `phase_lock_reacquisition_time_us`: how long a modeled phase-lock slip takes to recover
+- `phase_lock_reference_jitter_us`: how much reference timing jitter degrades the phase-lock margin
 - `link_phase_stability`: how stable the microwave-to-optical link stays under operation
 
 Those knobs feed directly into:
@@ -55,10 +61,14 @@ Those knobs feed directly into:
 - transduction channel efficiency before dynamic phase/noise penalties
 - effective transduction efficiency
 - weakest channel-component margin versus the nominal target stack
+- detector false-positive penalty from dark counts
+- detector dead-time overhead
+- phase-lock slip probability and reference stability
+- phase-lock reacquisition overhead
 - retry-adjusted link fidelity
 - dynamic link stability after phase-lock duty and added-noise penalties
 - link margin versus the `TARGET` operating point
-- the split between a supply bottleneck and a transduction-link bottleneck
+- the split between supply, transduction-link, phase-lock, detector, memory, and control bottlenecks
 
 ## Key Concepts
 
@@ -126,7 +136,13 @@ print(f"Calibration:     {result.transduction_calibration_quality:.2f}")
 print(f"Optical couple:  {result.optical_coupling_efficiency:.2f}")
 print(f"Heralding:       {result.heralding_success_probability:.2f}")
 print(f"Detector eff.:   {result.detector_efficiency:.2f}")
+print(f"Detector dark:   {result.detector_dark_count_probability:.3f}")
+print(f"Detector penalty:{result.detector_false_positive_penalty:.3f}")
+print(f"Detector dead:   {result.detector_dead_time_overhead_us:.1f} us")
 print(f"Phase-lock duty: {result.phase_lock_duty_cycle:.2f}")
+print(f"Phase slip:      {result.phase_lock_slip_probability:.3f}")
+print(f"Phase ref.:      {result.phase_lock_reference_stability:.3f}")
+print(f"Phase reacq.:    {result.phase_lock_reacquisition_overhead_us:.1f} us")
 print(f"Phase stability: {result.link_phase_stability:.2f}")
 print(f"Weakest channel: {result.weakest_channel_component} ({result.weakest_channel_margin:.2f}x)")
 print(f"Bell attempts:   {result.expected_attempts_per_bell_pair:.2f}")
