@@ -6,29 +6,30 @@ accessible, there are no circular imports, and __all__ exports are correct.
 
 from __future__ import annotations
 
-import importlib
 import sys
-
-import pytest
 
 
 # ===================================================================
 # Importability
 # ===================================================================
 
+
 class TestPackageImports:
     """All three top-level packages must be importable."""
 
     def test_qontos_sim_importable(self):
         import qontos_sim
+
         assert qontos_sim is not None
 
     def test_qontos_twin_importable(self):
         import qontos_twin
+
         assert qontos_twin is not None
 
     def test_qontos_tensor_importable(self):
         import qontos_tensor
+
         assert qontos_tensor is not None
 
 
@@ -36,21 +37,25 @@ class TestPackageImports:
 # Version accessible
 # ===================================================================
 
+
 class TestVersionAccess:
     """__version__ must be available on every package."""
 
     def test_qontos_sim_version(self):
         import qontos_sim
+
         assert isinstance(qontos_sim.__version__, str)
         assert len(qontos_sim.__version__) > 0
 
     def test_qontos_twin_version(self):
         import qontos_twin
+
         assert isinstance(qontos_twin.__version__, str)
         assert len(qontos_twin.__version__) > 0
 
     def test_qontos_tensor_version(self):
         import qontos_tensor
+
         assert isinstance(qontos_tensor.__version__, str)
         assert len(qontos_tensor.__version__) > 0
 
@@ -67,6 +72,7 @@ class TestVersionAccess:
 # No circular imports
 # ===================================================================
 
+
 class TestNoCircularImports:
     """Reimporting after cache clear should succeed without cycles."""
 
@@ -76,6 +82,7 @@ class TestNoCircularImports:
         saved = {k: sys.modules.pop(k) for k in mod_keys}
         try:
             import qontos_sim  # fresh import
+
             assert qontos_sim.__version__
         finally:
             # Restore to avoid side effects on other tests
@@ -86,6 +93,7 @@ class TestNoCircularImports:
         saved = {k: sys.modules.pop(k) for k in mod_keys}
         try:
             import qontos_twin
+
             assert qontos_twin.__version__
         finally:
             sys.modules.update(saved)
@@ -95,6 +103,7 @@ class TestNoCircularImports:
         saved = {k: sys.modules.pop(k) for k in mod_keys}
         try:
             import qontos_tensor
+
             assert qontos_tensor.__version__
         finally:
             sys.modules.update(saved)
@@ -103,6 +112,7 @@ class TestNoCircularImports:
 # ===================================================================
 # __all__ exports are correct
 # ===================================================================
+
 
 class TestAllExports:
     """Every name in __all__ must be resolvable on the module."""
@@ -133,10 +143,10 @@ class TestAllExports:
 
         expected = {
             "__version__",
-            "LocalSimulatorExecutor",
-            "NoisySimulatorExecutor",
-            "ValidationResult",
-            "aer_result_to_partition_result",
+            "Circuit",
+            "Instruction",
+            "simulate",
+            "Result",
         }
         assert expected.issubset(set(qontos_sim.__all__))
 

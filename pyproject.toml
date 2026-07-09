@@ -19,23 +19,17 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.24",
-    "pydantic>=2.0",
-    "qontos @ git+https://github.com/qontos/qontos.git@v0.2.0",
 ]
 
 [project.optional-dependencies]
-sim = ["qiskit>=1.0", "qiskit-aer>=0.13"]
-twin = []  # pure Python, no extra deps
-tensor = []  # pure numpy, no extra deps
-all = ["qontos-sim[sim,twin,tensor]"]
+# Aer-backed executors are an optional convenience; the core needs none of this.
+aer = ["qiskit>=1.0", "qiskit-aer>=0.13"]
+all = ["qontos-sim[aer]"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
-    "mypy>=1.8",
     "ruff>=0.4",
     "build>=1.0",
-    "qiskit>=1.0",
-    "qiskit-aer>=0.13",
 ]
 
 [project.urls]
