@@ -34,71 +34,53 @@
 
 ## Overview
 
-QONTOS Simulators provides the simulation and digital-twin layer for the QONTOS platform. It includes local simulators, noisy simulation, modular architecture models, and tensor-network tools used for validation, planning, and large-scale system studies. This repository supports both present-day software workflows and future native QONTOS hardware design work.
+QONTOS Simulators is a small, self-contained SDK for building and running quantum algorithms. The whole package depends only on NumPy: a friendly circuit builder, an exact statevector simulator, and a matrix-product-state (tensor-network) backend for larger, low-entanglement circuits. It also ships a modular-architecture digital twin for system-level planning.
 
-Start with [docs/index.md](docs/index.md) for the lightweight docs hub and links into the broader public QONTOS ecosystem.
-For the canonical install and release policy across the public repos, use [the shared policy](https://github.com/qontos/.github/blob/main/docs/release-install-policy.md).
+Start with [docs/index.md](docs/index.md) for the lightweight docs hub.
 
-It provides three simulation backends:
+It provides:
 
-1. **`qontos_sim`** — Qiskit Aer-based simulators (noiseless and noisy)
-2. **`qontos_twin`** — Modular hardware digital twin for architecture studies
-3. **`qontos_tensor`** — Pure NumPy tensor network engine (MPS, MPO, DMRG)
+1. **`qontos_sim`** — the developer SDK: a `Circuit` builder and one `simulate` call, with an exact statevector backend and a tensor-network (MPS) backend.
+2. **`qontos_twin`** — a modular-hardware digital twin for architecture and throughput studies.
+3. **`qontos_tensor`** — a pure NumPy tensor-network engine (MPS, MPO, DMRG) that powers the MPS backend.
 
 ## Installation
 
+Requires Python 3.10+ and NumPy. Nothing else.
+
 ### Pre-release (current)
 
-The QONTOS packages are not yet published to PyPI. Install from pinned release tags:
+Not yet on PyPI. Install from source or a pinned release tag:
 
 ```bash
-pip install "qontos-sim[all] @ git+https://github.com/qontos/qontos-sim.git@v0.1.0"
+pip install "qontos-sim @ git+https://github.com/qontos/qontos-sim.git@v0.1.0"
 ```
 
-This automatically installs the pinned `qontos` SDK dependency (`v0.2.0`).
-
-### Optional dependency groups (pre-release)
-
-```bash
-pip install "qontos-sim[sim] @ git+https://github.com/qontos/qontos-sim.git@v0.1.0"
-pip install "qontos-sim[twin] @ git+https://github.com/qontos/qontos-sim.git@v0.1.0"
-pip install "qontos-sim[tensor] @ git+https://github.com/qontos/qontos-sim.git@v0.1.0"
-pip install "qontos-sim[all] @ git+https://github.com/qontos/qontos-sim.git@v0.1.0"
-pip install "qontos-sim[dev] @ git+https://github.com/qontos/qontos-sim.git@v0.1.0"
-```
-
-> **Note**: Once published to PyPI, these simplify to `pip install qontos-sim[sim]`, etc.
-
-Requires Python 3.10+.
-
-The simulator package is designed to work alongside the flagship [`qontos`](https://github.com/qontos/qontos) SDK because it consumes the public `CircuitIR` and `PartitionResult` schemas from that repo.
+Once published to PyPI this becomes `pip install qontos-sim`.
 
 ## Quick Start
 
-### Local Simulator
+Build a Bell pair and run it in three lines:
 
 ```python
-from qontos.circuit import CircuitNormalizer
-from qontos_sim import LocalSimulatorExecutor
+from qontos_sim import Circuit, simulate
 
-normalizer = CircuitNormalizer()
-circuit_ir = normalizer.normalize(input_type="openqasm", source=qasm_source)
-executor = LocalSimulatorExecutor()
-result = executor.submit(circuit_ir, shots=8192)
-print(result.counts)
+c = Circuit(2)
+c.h(0).cx(0, 1).measure_all()
+result = simulate(c, shots=1000)
+print(result.counts)          # {'00': ~500, '11': ~500}
 ```
 
-### Noisy Simulation
+A 3-qubit GHZ state on the tensor-network backend:
 
 ```python
-from qontos.circuit import CircuitNormalizer
-from qontos_sim import NoisySimulatorExecutor
+from qontos_sim import Circuit, simulate
 
-normalizer = CircuitNormalizer()
-circuit_ir = normalizer.normalize(input_type="openqasm", source=qasm_source)
-executor = NoisySimulatorExecutor()
-result = executor.submit(circuit_ir, shots=8192)
+ghz = Circuit(3).h(0).cx(0, 1).cx(1, 2).measure_all()
+print(simulate(ghz, shots=1000, method="mps").counts)   # {'000': ~500, '111': ~500}
 ```
+
+Bitstring convention: position `i` is the measured value of qubit `i` (qubit 0 leftmost).
 
 ### Digital Twin
 
@@ -134,12 +116,11 @@ print(result.measurements[:5])
 
 ## Simulators
 
-| Simulator | Backend | Qubits | Speed | Use Case |
-| :--- | :--- | :--- | :--- | :--- |
-| `LocalSimulatorExecutor` | Qiskit Aer (statevector) | Up to ~30 | Fast | Pipeline validation, unit tests |
-| `NoisySimulatorExecutor` | Qiskit Aer (depolarizing) | Up to ~30 | Fast | Noise-aware testing |
-| `ModularSimulator` | Digital twin | Unlimited (modeled) | Instant | Architecture studies, scenario planning |
-| `TNSimulator` | Tensor network (MPS) | 1000+ | Varies | Large circuits, bounded entanglement |
+| How to call | Backend | Qubits | Use case |
+| :--- | :--- | :--- | :--- |
+| `simulate(c, method="statevector")` | Exact statevector (NumPy) | Up to ~25 | The default; exact, any circuit |
+| `simulate(c, method="mps")` | Tensor network (MPS) | Larger, bounded entanglement | Big low-entanglement circuits |
+| `ModularSimulator` (`qontos_twin`) | Digital twin | Unlimited (modeled) | Architecture and throughput studies |
 
 ## Digital Twin
 
@@ -169,15 +150,17 @@ Pure NumPy implementation — zero external tensor network dependencies.
 - **DMRG** — Variational ground-state search for 100+ site systems
 - **Circuit simulation** — Full circuit evolution via MPS
 
-## Related Repositories
+## Examples
 
-| Repository | Description |
-| :--- | :--- |
-| [qontos](https://github.com/qontos/qontos) | Flagship Python SDK |
-| [qontos-sim](https://github.com/qontos/qontos-sim) | Simulators and digital twin |
-| [qontos-examples](https://github.com/qontos/qontos-examples) | Tutorials and examples |
-| [qontos-benchmarks](https://github.com/qontos/qontos-benchmarks) | Benchmark evidence |
-| [qontos-research](https://github.com/qontos/qontos-research) | Research papers and roadmap |
+Runnable scripts live in [`examples/`](examples):
+
+- `quickstart.py` — Bell and GHZ states end to end.
+- `chsh_bell_inequality.py` — reproduces the CHSH violation (S approaches 2.83, beating the classical bound of 2).
+- `variational_sweep.py` — a one-qubit energy sweep, the kernel of a variational algorithm.
+
+## Related repositories
+
+More of the QONTOS open-source ecosystem (examples, benchmarks, research) is being prepared and will be linked here as each repository is published.
 
 ## License
 
