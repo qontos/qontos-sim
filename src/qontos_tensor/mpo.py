@@ -39,9 +39,12 @@ Copyright (c) 2024-2026 QONTOS Inc. All rights reserved.
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from qontos_tensor.mps import MatrixProductState
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +75,7 @@ class MatrixProductOperator:
     """
 
     def __init__(self, tensors: List[np.ndarray], d: int = 2) -> None:
-        self.tensors: List[np.ndarray] = [
-            np.asarray(t, dtype=np.complex128) for t in tensors
-        ]
+        self.tensors: List[np.ndarray] = [np.asarray(t, dtype=np.complex128) for t in tensors]
         self.d = d
         self._validate()
 
@@ -90,8 +91,8 @@ class MatrixProductOperator:
         for i in range(n - 1):
             if self.tensors[i].shape[3] != self.tensors[i + 1].shape[2]:
                 raise ValueError(
-                    f"MPO bond mismatch between sites {i} and {i+1}: "
-                    f"{self.tensors[i].shape[3]} != {self.tensors[i+1].shape[2]}"
+                    f"MPO bond mismatch between sites {i} and {i + 1}: "
+                    f"{self.tensors[i].shape[3]} != {self.tensors[i + 1].shape[2]}"
                 )
         if self.tensors[0].shape[2] != 1:
             raise ValueError("MPO left boundary must have chi_left=1")
@@ -144,21 +145,21 @@ class MatrixProductOperator:
 
         new_tensors: List[np.ndarray] = []
         for i in range(self.n_sites):
-            A = mps.tensors[i]      # (d, chi_l_mps, chi_r_mps)
-            W = self.tensors[i]     # (d, d, chi_l_mpo, chi_r_mpo)
+            A = mps.tensors[i]  # (d, chi_l_mps, chi_r_mps)
+            W = self.tensors[i]  # (d, d, chi_l_mpo, chi_r_mpo)
 
             # Contract: B[s_out, (l_mps, l_mpo), (r_mps, r_mpo)]
             #         = sum_{s_in} W[s_out, s_in, l_mpo, r_mpo] * A[s_in, l_mps, r_mps]
-            B = np.einsum("abij,bkl->akiljl", W, A)
+            np.einsum("abij,bkl->akiljl", W, A)
             # B has shape (d, chi_l_mps, chi_l_mpo, chi_r_mps, chi_r_mpo)
             # but we wrote it wrong -- let's be explicit
-            B = np.einsum("oiab,ikl->oakbl", W, A)
+            np.einsum("oiab,ikl->oakbl", W, A)
             # B shape: (d, chi_l_mps, chi_l_mpo, chi_r_mps, chi_r_mpo)
             # Wait -- need to be more careful with indices.
 
             # W[s_out, s_in, a_l, a_r], A[s_in, m_l, m_r]
             # Result: C[s_out, m_l, a_l, m_r, a_r]
-            C = np.einsum("oiab,imr->omarbr", W, A)
+            np.einsum("oiab,imr->omarbr", W, A)
             # C shape is wrong because einsum doesn't work that way.
             # Let me use explicit shapes.
 
@@ -169,7 +170,7 @@ class MatrixProductOperator:
             chi_r_mpo = W.shape[3]
 
             # C[s_out, m_l, a_l, m_r, a_r] = sum_{s_in} W[s_out, s_in, a_l, a_r] * A[s_in, m_l, m_r]
-            C = np.einsum("oiab,imr->omarb", W, A)
+            np.einsum("oiab,imr->omarb", W, A)
             # Reshape: combine (m_l, a_l) and (m_r, a_r)
             # C has shape (d, chi_l_mps, chi_l_mpo, chi_r_mps, chi_r_mpo) -- not right
             # Let me just be explicit:
@@ -182,7 +183,7 @@ class MatrixProductOperator:
                 for s_in in range(d):
                     # W_slice: (chi_l_mpo, chi_r_mpo), A_slice: (chi_l_mps, chi_r_mps)
                     W_s = W[s_out, s_in, :, :]  # (a_l, a_r)
-                    A_s = A[s_in, :, :]          # (m_l, m_r)
+                    A_s = A[s_in, :, :]  # (m_l, m_r)
                     # Kronecker product: (m_l, a_l) x (m_r, a_r)
                     C2[s_out] += np.kron(A_s, W_s)
 
@@ -219,9 +220,7 @@ class MatrixProductOperator:
             Q, R = np.linalg.qr(mat)
             chi_new = Q.shape[1]
             self.tensors[i] = Q.reshape(d, d, chi_l, chi_new)
-            self.tensors[i + 1] = np.einsum(
-                "ij,abjk->abik", R, self.tensors[i + 1]
-            )
+            self.tensors[i + 1] = np.einsum("ij,abjk->abik", R, self.tensors[i + 1])
 
         # Right-to-left SVD truncation sweep
         total_error = 0.0
@@ -239,9 +238,7 @@ class MatrixProductOperator:
             S = S[:chi_new]
             Vh = Vh[:chi_new, :]
             self.tensors[i] = Vh.reshape(chi_new, d, d, chi_r).transpose(1, 2, 0, 3)
-            self.tensors[i - 1] = np.einsum(
-                "abij,jk->abik", self.tensors[i - 1], U @ np.diag(S)
-            )
+            self.tensors[i - 1] = np.einsum("abij,jk->abik", self.tensors[i - 1], U @ np.diag(S))
 
         return total_error
 
@@ -268,7 +265,7 @@ class MatrixProductOperator:
         new_tensors: List[np.ndarray] = []
 
         for i in range(n):
-            Wa = self.tensors[i]   # (d, d, chi_la, chi_ra)
+            Wa = self.tensors[i]  # (d, d, chi_la, chi_ra)
             Wb = other.tensors[i]  # (d, d, chi_lb, chi_rb)
 
             chi_la, chi_ra = Wa.shape[2], Wa.shape[3]
@@ -311,15 +308,13 @@ class MatrixProductOperator:
         return MatrixProductOperator([t.copy() for t in self.tensors], d=self.d)
 
     def __repr__(self) -> str:
-        return (
-            f"MatrixProductOperator(n={self.n_sites}, d={self.d}, "
-            f"max_chi={self.max_bond_dim})"
-        )
+        return f"MatrixProductOperator(n={self.n_sites}, d={self.d}, max_chi={self.max_bond_dim})"
 
 
 # ===================================================================
 # Factory: from Pauli string
 # ===================================================================
+
 
 def _single_site_mpo_tensor(op: np.ndarray) -> np.ndarray:
     """Wrap a (d, d) operator into a rank-4 MPO tensor with bond dim 1."""
@@ -371,6 +366,7 @@ def from_pauli_string(
 # Factory: from Hamiltonian (sum of Pauli terms)
 # ===================================================================
 
+
 def from_hamiltonian(
     terms: List[Tuple[str, complex]],
     n_sites: Optional[int] = None,
@@ -406,16 +402,17 @@ def from_hamiltonian(
 # Identity MPO
 # ===================================================================
 
+
 def identity_mpo(n_sites: int, d: int = 2) -> MatrixProductOperator:
     """Identity MPO with bond dimension 1."""
-    tensors = [_single_site_mpo_tensor(np.eye(d, dtype=np.complex128))
-               for _ in range(n_sites)]
+    tensors = [_single_site_mpo_tensor(np.eye(d, dtype=np.complex128)) for _ in range(n_sites)]
     return MatrixProductOperator(tensors, d=d)
 
 
 # ===================================================================
 # Standard Hamiltonians (MPO form with finite bond dimension)
 # ===================================================================
+
 
 def transverse_field_ising(
     n: int,
@@ -596,30 +593,12 @@ def hubbard_1d(
     # Build as a sum of Pauli terms using Jordan-Wigner
     # For simplicity, we build term-by-term and add MPOs
     n_qubits = 2 * n_sites
-    d = 2
 
     # Helper: fermionic creation/annihilation via Jordan-Wigner
     # c^dag_j = Z_0 x Z_1 x ... x Z_{j-1} x S+_j
     # c_j     = Z_0 x Z_1 x ... x Z_{j-1} x S-_j
 
-    def _hopping_term_mpo(j: int, k: int, coeff: complex) -> MatrixProductOperator:
-        """
-        Build MPO for coeff * (c^dag_j c_k + h.c.) where j < k.
-        Jordan-Wigner: c^dag_j c_k = S+_j (prod_{m=j+1}^{k-1} Z_m) S-_k
-        """
-        tensors = []
-        for site in range(n_qubits):
-            if site == j:
-                W = np.zeros((d, d, 1 if site == 0 else D_prev, 2), dtype=np.complex128)
-                left_dim = 1 if site == 0 else D_prev
-                W[:, :, :, 0] = np.stack([_I2] * left_dim, axis=-1).reshape(d, d, left_dim) if left_dim > 1 else _I2.reshape(d, d, 1)
-                # This is getting complicated -- use Pauli-sum approach instead
-                pass
-
-        # Fallback: use the Pauli-string sum approach
-        return None  # handled below
-
-    # More tractable approach: build from explicit Pauli strings
+    # Build from explicit Pauli strings (Jordan-Wigner mapped)
     terms: List[Tuple[str, complex]] = []
 
     # On-site interaction: U * n_up * n_down at each physical site

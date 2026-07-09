@@ -43,7 +43,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -56,6 +56,7 @@ logger = logging.getLogger(__name__)
 # ===================================================================
 # Configuration and result data classes
 # ===================================================================
+
 
 @dataclass
 class DMRGConfig:
@@ -138,6 +139,7 @@ class DMRGResult:
 # ===================================================================
 # DMRG Engine
 # ===================================================================
+
 
 class DMRG:
     """
@@ -303,9 +305,7 @@ class DMRG:
             else:
                 # Excited state: penalty method
                 init = initial_states[k] if initial_states and len(initial_states) > k else None
-                result = self._excited_state_dmrg(
-                    found_states, penalty_weight, initial_state=init
-                )
+                result = self._excited_state_dmrg(found_states, penalty_weight, initial_state=init)
 
             results.append(result)
             if result.state is not None:
@@ -345,8 +345,8 @@ class DMRG:
         cfg = self.config
         d = self.d
 
-        A = psi.tensors[site]        # (d, chi_l, chi_m)
-        B = psi.tensors[site + 1]    # (d, chi_m, chi_r)
+        A = psi.tensors[site]  # (d, chi_l, chi_m)
+        B = psi.tensors[site + 1]  # (d, chi_m, chi_r)
         chi_l = A.shape[1]
         chi_r = B.shape[2]
 
@@ -354,10 +354,10 @@ class DMRG:
         theta = np.einsum("ilm,jmr->ijlr", A, B)
 
         # Get effective Hamiltonian action as a function
-        L = self._left_envs[site]         # (chi_l_psi, chi_l_H, chi_l_psi)
-        R = self._right_envs[site + 2]    # (chi_r_psi, chi_r_H, chi_r_psi)
-        W1 = self.H.tensors[site]         # (d, d, chi_l_H, chi_r_H_mid)
-        W2 = self.H.tensors[site + 1]     # (d, d, chi_r_H_mid, chi_r_H)
+        L = self._left_envs[site]  # (chi_l_psi, chi_l_H, chi_l_psi)
+        R = self._right_envs[site + 2]  # (chi_r_psi, chi_r_H, chi_r_psi)
+        W1 = self.H.tensors[site]  # (d, d, chi_l_H, chi_r_H_mid)
+        W2 = self.H.tensors[site + 1]  # (d, d, chi_r_H_mid, chi_r_H)
 
         def h_eff(vec: np.ndarray) -> np.ndarray:
             """Apply the effective Hamiltonian to a flattened 2-site vector."""
@@ -380,7 +380,11 @@ class DMRG:
 
             result = np.einsum(
                 "awb,pqwx,rsxy,cyd,qsbd->prac",
-                L, W1, W2, R, psi_2site,
+                L,
+                W1,
+                W2,
+                R,
+                psi_2site,
                 optimize="greedy",
             )
             return result.ravel()
@@ -499,7 +503,7 @@ class DMRG:
 
         # Tridiagonal matrix elements
         alpha = np.zeros(max_iter + 1, dtype=np.float64)  # diagonal
-        beta = np.zeros(max_iter + 1, dtype=np.float64)   # off-diagonal
+        beta = np.zeros(max_iter + 1, dtype=np.float64)  # off-diagonal
 
         prev_eigenvalue = float("inf")
 
@@ -530,8 +534,10 @@ class DMRG:
 
             # Check convergence by diagonalizing the tridiagonal matrix
             if j >= 1:
-                T = np.diag(alpha[: j + 1]) + np.diag(beta[1: j + 1], 1) + np.diag(
-                    beta[1: j + 1], -1
+                T = (
+                    np.diag(alpha[: j + 1])
+                    + np.diag(beta[1 : j + 1], 1)
+                    + np.diag(beta[1 : j + 1], -1)
                 )
                 evals, evecs = np.linalg.eigh(T)
                 eigenvalue = evals[0]
@@ -594,15 +600,15 @@ class DMRG:
 
     def _update_right_env_from_scratch(self, psi: MatrixProductState, site: int) -> None:
         """Compute R[site] from R[site+1]."""
-        A = psi.tensors[site]       # (d, chi_l, chi_r)
-        W = self.H.tensors[site]    # (d, d, chi_l_H, chi_r_H)
+        A = psi.tensors[site]  # (d, chi_l, chi_r)
+        W = self.H.tensors[site]  # (d, d, chi_l_H, chi_r_H)
         R = self._right_envs[site + 1]  # (chi_r, chi_r_H, chi_r)
 
         # R_new[a, w, b] = sum_{s,s',c,y,d} conj(A[s',a,c]) * W[s',s,w,y] * A[s,b,d] * R[c,y,d]
         # Step 1: contract A with R
         tmp1 = np.einsum("sbd,cyd->sbcy", A, R)
         # Step 2: contract with W
-        tmp2 = np.einsum("sbcy,tswx->tbwxcy", tmp1, W)
+        np.einsum("sbcy,tswx->tbwxcy", tmp1, W)
         # Hmm, this is getting tangled. Let me do it more carefully.
 
         # R_new[a, w, b] = sum_{s, s', c, y, d}
@@ -613,7 +619,7 @@ class DMRG:
         # Let's index R as R[c, y, d]
 
         # Step 1: tmp[s, b, c, y] = sum_d A[s, b, d] * R[c, y, d]
-        tmp = np.einsum("sbd,cyd->sbcy", A, R)
+        np.einsum("sbd,cyd->sbcy", A, R)
         # Step 2: tmp2[s', a, w] = sum_{s, b, c, y} conj(A[s',a,c]) * W[s',s,w,y] * tmp[s,b,c,y]
         # -- too many indices. Let me merge differently.
 
@@ -622,22 +628,28 @@ class DMRG:
         # Let me use one big einsum:
         R_new = np.einsum(
             "tac,tswx,sbd,cxd->awb",
-            A.conj(), W, A, R,
+            A.conj(),
+            W,
+            A,
+            R,
             optimize="greedy",
         )
         self._right_envs[site] = R_new
 
     def _update_left_env(self, psi: MatrixProductState, site: int) -> None:
         """Update L[site+1] from L[site] after optimizing site."""
-        A = psi.tensors[site]       # (d, chi_l, chi_r)
-        W = self.H.tensors[site]    # (d, d, chi_l_H, chi_r_H)
-        L = self._left_envs[site]   # (chi_l, chi_l_H, chi_l)
+        A = psi.tensors[site]  # (d, chi_l, chi_r)
+        W = self.H.tensors[site]  # (d, d, chi_l_H, chi_r_H)
+        L = self._left_envs[site]  # (chi_l, chi_l_H, chi_l)
 
         # L_new[c, y, d] = sum_{s, s', a, w, b}
         #   conj(A[s', a, c]) * W[s', s, w, y] * A[s, b, d] * L[a, w, b]
         L_new = np.einsum(
             "awb,tac,tswx,sbd->cxd",
-            L, A.conj(), W, A,
+            L,
+            A.conj(),
+            W,
+            A,
             optimize="greedy",
         )
         self._left_envs[site + 1] = L_new
@@ -670,8 +682,9 @@ class DMRG:
             else:
                 chi_right = 1
 
-            A = np.random.randn(d, chi_left, chi_right) + \
-                1j * np.random.randn(d, chi_left, chi_right)
+            A = np.random.randn(d, chi_left, chi_right) + 1j * np.random.randn(
+                d, chi_left, chi_right
+            )
             A /= np.linalg.norm(A)
             tensors.append(A)
             chi_left = chi_right
@@ -726,15 +739,27 @@ class DMRG:
 
             for i in range(self.n_sites - 1):
                 energy, trunc_err = self._optimize_two_site_excited(
-                    psi, i, "right", noise, lower_states,
-                    penalty_weight, penalty_left_envs, penalty_right_envs,
+                    psi,
+                    i,
+                    "right",
+                    noise,
+                    lower_states,
+                    penalty_weight,
+                    penalty_left_envs,
+                    penalty_right_envs,
                 )
                 sweep_error += trunc_err
 
             for i in range(self.n_sites - 2, -1, -1):
                 energy, trunc_err = self._optimize_two_site_excited(
-                    psi, i, "left", noise, lower_states,
-                    penalty_weight, penalty_left_envs, penalty_right_envs,
+                    psi,
+                    i,
+                    "left",
+                    noise,
+                    lower_states,
+                    penalty_weight,
+                    penalty_left_envs,
+                    penalty_right_envs,
                 )
                 sweep_error += trunc_err
 
@@ -777,9 +802,9 @@ class DMRG:
         right_envs[n] = np.ones((1, 1), dtype=np.complex128)
 
         for i in range(n):
-            A = psi.tensors[i]      # (d, chi_l_psi, chi_r_psi)
-            B = target.tensors[i]   # (d, chi_l_tar, chi_r_tar)
-            L = left_envs[i]        # (chi_l_psi, chi_l_tar)
+            A = psi.tensors[i]  # (d, chi_l_psi, chi_r_psi)
+            B = target.tensors[i]  # (d, chi_l_tar, chi_r_tar)
+            L = left_envs[i]  # (chi_l_psi, chi_l_tar)
             left_envs[i + 1] = np.einsum("ab,sac,sbd->cd", L, A, B.conj())
 
         for i in range(n - 1, -1, -1):
@@ -825,7 +850,11 @@ class DMRG:
             # Hamiltonian part
             result = np.einsum(
                 "awb,pqwx,rsxy,cyd,qsbd->prac",
-                L, W1, W2, R, psi_2site,
+                L,
+                W1,
+                W2,
+                R,
+                psi_2site,
                 optimize="greedy",
             )
 
@@ -841,12 +870,17 @@ class DMRG:
                 # overlap = <phi_k_local|psi_local> with environments
                 overlap = np.einsum(
                     "ab,ijac,ijbd,cd->",
-                    Lp, theta_k.conj(), psi_2site, Rp,
+                    Lp,
+                    theta_k.conj(),
+                    psi_2site,
+                    Rp,
                 )
                 # penalty: w * overlap * |phi_k_local>
                 proj = np.einsum(
                     "ab,ijac,cd->ijbd",
-                    Lp, theta_k.conj(), Rp,
+                    Lp,
+                    theta_k.conj(),
+                    Rp,
                 )
                 result += penalty_weight * overlap * proj
 
@@ -856,8 +890,11 @@ class DMRG:
         theta_flat = theta.ravel()
 
         eigenvalue, eigenvector = self._lanczos(
-            h_eff, theta_flat, vec_size,
-            max_iter=cfg.lanczos_max_iter, tol=cfg.lanczos_tol,
+            h_eff,
+            theta_flat,
+            vec_size,
+            max_iter=cfg.lanczos_max_iter,
+            tol=cfg.lanczos_tol,
         )
 
         # SVD split (same as ground state)

@@ -24,6 +24,7 @@ from qontos_twin.modular_simulator import (
 # SystemConfig creation
 # ===================================================================
 
+
 class TestSystemConfig:
     """Test SystemConfig dataclass defaults and derived properties."""
 
@@ -100,6 +101,7 @@ class TestSystemConfig:
 # ===================================================================
 # simulate_workload return fields
 # ===================================================================
+
 
 class TestSimulateWorkloadFields:
     """Verify that simulate_workload returns all expected fields."""
@@ -179,6 +181,7 @@ class TestSimulateWorkloadFields:
 # Single-module workload (no inter-module overhead)
 # ===================================================================
 
+
 class TestSingleModule:
     """Single-module system should have zero inter-module overhead."""
 
@@ -198,6 +201,7 @@ class TestSingleModule:
 # ===================================================================
 # Multi-module workload (inter-module gates increase runtime)
 # ===================================================================
+
 
 class TestMultiModule:
     """Multi-module systems should show inter-module overhead."""
@@ -221,6 +225,7 @@ class TestMultiModule:
 # ===================================================================
 # Transduction efficiency bands
 # ===================================================================
+
 
 class TestTransductionBands:
     """Test the four degradation bands from the whitepaper."""
@@ -262,6 +267,7 @@ class TestTransductionBands:
 # Fidelity degrades with more inter-module gates
 # ===================================================================
 
+
 class TestFidelityDegradation:
     """More inter-module gates should lower fidelity."""
 
@@ -283,6 +289,7 @@ class TestFidelityDegradation:
 # Bell pair count scales with cross-module entanglement
 # ===================================================================
 
+
 class TestBellPairScaling:
     """Bell pairs needed should scale with inter-module gate count."""
 
@@ -301,6 +308,7 @@ class TestBellPairScaling:
 # Effective circuit depth increase from serialization
 # ===================================================================
 
+
 class TestEffectiveDepth:
     """Effective depth should increase by the inter-module gate count."""
 
@@ -313,6 +321,7 @@ class TestEffectiveDepth:
 # ===================================================================
 # Scenario comparison: base vs aggressive vs stretch
 # ===================================================================
+
 
 class TestScenarioComparison:
     """Compare results across transduction efficiency scenarios."""
@@ -664,11 +673,15 @@ class TestHybridKnobSensitivity:
 
     def test_parallel_links_increase_supply_capacity(self):
         baseline = simulate_workload(
-            SystemConfig(num_modules=4, transduction_efficiency=0.12, entanglement_parallel_links=1),
+            SystemConfig(
+                num_modules=4, transduction_efficiency=0.12, entanglement_parallel_links=1
+            ),
             circuit_depth=100,
         )
         upgraded = simulate_workload(
-            SystemConfig(num_modules=4, transduction_efficiency=0.12, entanglement_parallel_links=4),
+            SystemConfig(
+                num_modules=4, transduction_efficiency=0.12, entanglement_parallel_links=4
+            ),
             circuit_depth=100,
         )
         assert upgraded.effective_bell_pair_rate_hz > baseline.effective_bell_pair_rate_hz
@@ -681,7 +694,9 @@ class TestHybridKnobSensitivity:
             circuit_depth=100,
         )
         buffered = simulate_workload(
-            SystemConfig(num_modules=4, transduction_efficiency=0.10, entanglement_buffer_pairs=600),
+            SystemConfig(
+                num_modules=4, transduction_efficiency=0.10, entanglement_buffer_pairs=600
+            ),
             circuit_depth=100,
         )
         assert buffered.buffered_bell_pairs_used > 0

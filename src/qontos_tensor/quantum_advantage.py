@@ -31,9 +31,8 @@ Copyright (c) 2024-2026 QONTOS Inc. All rights reserved.
 from __future__ import annotations
 
 import logging
-import math
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -43,6 +42,7 @@ logger = logging.getLogger(__name__)
 # ===================================================================
 # Simulation capabilities registry
 # ===================================================================
+
 
 @dataclass
 class SimulatorProfile:
@@ -194,6 +194,7 @@ class SimulationCapabilities:
 # TNAdvantage: detailed analysis
 # ===================================================================
 
+
 class TNAdvantage:
     """
     Analysis tools for quantifying QONTOS tensor network advantages.
@@ -238,13 +239,13 @@ class TNAdvantage:
 
         for n in n_qubits_range:
             # Statevector: 2^n complex128 numbers
-            sv_mem = (2 ** n) * 16  # bytes
+            sv_mem = (2**n) * 16  # bytes
             # MPS: n * d * chi^2 * 16 bytes (approximately)
             mps_mem = n * d * chi * chi * 16
 
             # FLOPs for a single 2-qubit gate
-            sv_flops = 4 * (2 ** n)  # matrix-vector for 4x4 gate on 2^n vector
-            mps_flops = d ** 4 * chi ** 3  # SVD-dominated
+            sv_flops = 4 * (2**n)  # matrix-vector for 4x4 gate on 2^n vector
+            mps_flops = d**4 * chi**3  # SVD-dominated
 
             results["n_qubits"].append(n)
             results["sv_memory_bytes"].append(sv_mem)
@@ -288,7 +289,7 @@ class TNAdvantage:
         comparisons = {}
         d = 2
 
-        qontos_mem = n_qubits * d * chi ** 2 * 16
+        qontos_mem = n_qubits * d * chi**2 * 16
         qontos_feasible = True
 
         for key, profile in SimulationCapabilities.SIMULATORS.items():
@@ -300,21 +301,22 @@ class TNAdvantage:
                 and n_qubits <= profile.max_qubits_statevector
             )
             comp_feasible_mps = (
-                profile.max_qubits_mps is not None
-                and n_qubits <= profile.max_qubits_mps
+                profile.max_qubits_mps is not None and n_qubits <= profile.max_qubits_mps
             )
 
             comp_mem = None
             if comp_feasible_sv:
-                comp_mem = (2 ** n_qubits) * 16
+                comp_mem = (2**n_qubits) * 16
             elif comp_feasible_mps and profile.mps_max_bond_dim:
                 comp_chi = profile.mps_max_bond_dim
-                comp_mem = n_qubits * d * comp_chi ** 2 * 16
+                comp_mem = n_qubits * d * comp_chi**2 * 16
 
             comparisons[key] = {
                 "name": profile.name,
                 "can_simulate": comp_feasible_sv or comp_feasible_mps,
-                "method": "statevector" if comp_feasible_sv else ("MPS" if comp_feasible_mps else "infeasible"),
+                "method": "statevector"
+                if comp_feasible_sv
+                else ("MPS" if comp_feasible_mps else "infeasible"),
                 "competitor_memory_bytes": comp_mem,
                 "qontos_memory_bytes": qontos_mem,
                 "memory_advantage": (
@@ -355,21 +357,21 @@ class TNAdvantage:
         if entanglement_structure == "linear":
             # Entanglement grows linearly with depth for 1D circuits
             estimated_entropy = min(circuit_depth * 0.5, n_qubits / 2)
-            chi_needed = int(min(2 ** estimated_entropy, 4096))
+            chi_needed = int(min(2**estimated_entropy, 4096))
         elif entanglement_structure == "local":
             # Local gates produce area-law entanglement
             estimated_entropy = min(circuit_depth * 0.1, np.log2(n_qubits))
-            chi_needed = int(min(2 ** estimated_entropy, 256))
+            chi_needed = int(min(2**estimated_entropy, 256))
         elif entanglement_structure == "tree":
             estimated_entropy = min(np.log2(circuit_depth + 1) * 2, n_qubits / 2)
-            chi_needed = int(min(2 ** estimated_entropy, 1024))
+            chi_needed = int(min(2**estimated_entropy, 1024))
         else:  # all_to_all
             estimated_entropy = min(circuit_depth * 1.0, n_qubits / 2)
-            chi_needed = int(min(2 ** estimated_entropy, 4096))
+            chi_needed = int(min(2**estimated_entropy, 4096))
 
         # Choose strategy
         sv_feasible = n_qubits <= 30
-        mps_memory = n_qubits * d * chi_needed ** 2 * 16
+        mps_memory = n_qubits * d * chi_needed**2 * 16
         mps_feasible = mps_memory < 64e9  # 64 GB limit
 
         if sv_feasible and chi_needed > 512:
@@ -459,13 +461,12 @@ class TNAdvantage:
 
         if gate_pattern not in patterns:
             raise ValueError(
-                f"Unknown gate pattern '{gate_pattern}'. "
-                f"Choose from: {list(patterns.keys())}"
+                f"Unknown gate pattern '{gate_pattern}'. Choose from: {list(patterns.keys())}"
             )
 
         pattern = patterns[gate_pattern]
         S = pattern["entropy_model"](n_qubits, depth)
-        chi_required = int(2 ** S)
+        chi_required = int(2**S)
 
         # Classify simulability
         if chi_required <= 64:
@@ -497,7 +498,7 @@ class TNAdvantage:
             "simulability": simulability,
             "estimated_time_class": time_class,
             "estimated_memory_bytes": mps_memory,
-            "statevector_memory_bytes": (2 ** n_qubits) * 16 if n_qubits <= 50 else float("inf"),
+            "statevector_memory_bytes": (2**n_qubits) * 16 if n_qubits <= 50 else float("inf"),
             "mps_advantage": (
                 f"MPS requires {mps_memory / 1e6:.1f} MB vs "
                 f"statevector {'infeasible' if n_qubits > 50 else f'{(2**n_qubits) * 16 / 1e6:.1f} MB'}"
@@ -508,6 +509,7 @@ class TNAdvantage:
 # ===================================================================
 # Quick advantage report
 # ===================================================================
+
 
 def generate_advantage_report(n_qubits: int = 100) -> str:
     """
@@ -529,11 +531,13 @@ def generate_advantage_report(n_qubits: int = 100) -> str:
     ]
 
     # Memory comparison
-    scaling = TNAdvantage.vs_statevector(chi=256)
+    TNAdvantage.vs_statevector(chi=256)
     lines.append("Memory Scaling (chi=256):")
-    lines.append(f"  Statevector: 2^{n_qubits} * 16 bytes = "
-                 f"{'INFEASIBLE' if n_qubits > 60 else f'{(2**n_qubits) * 16 / 1e9:.2f} GB'}")
-    mps_mem = n_qubits * 2 * 256 ** 2 * 16
+    lines.append(
+        f"  Statevector: 2^{n_qubits} * 16 bytes = "
+        f"{'INFEASIBLE' if n_qubits > 60 else f'{(2**n_qubits) * 16 / 1e9:.2f} GB'}"
+    )
+    mps_mem = n_qubits * 2 * 256**2 * 16
     lines.append(f"  Q-TENSOR MPS: {mps_mem / 1e6:.1f} MB")
     lines.append("")
 
@@ -542,10 +546,7 @@ def generate_advantage_report(n_qubits: int = 100) -> str:
     lines.append("Competitor Analysis:")
     for key, data in comps.items():
         feasible = "YES" if data["can_simulate"] else "NO"
-        lines.append(
-            f"  {data['name']:<30} Can simulate: {feasible:<5} "
-            f"Method: {data['method']}"
-        )
+        lines.append(f"  {data['name']:<30} Can simulate: {feasible:<5} Method: {data['method']}")
     lines.append(f"  {'QONTOS Q-TENSOR':<30} Can simulate: YES    Method: MPS (chi=256)")
     lines.append("")
 

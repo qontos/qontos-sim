@@ -15,6 +15,7 @@ import math
 @dataclass
 class ModuleConfig:
     """Configuration for a single quantum module."""
+
     qubits_per_module: int = 50
     gate_fidelity_1q: float = 0.999
     gate_fidelity_2q: float = 0.999
@@ -27,6 +28,7 @@ class ModuleConfig:
 @dataclass
 class SystemConfig:
     """Configuration for a modular quantum system."""
+
     num_modules: int = 4
     module: ModuleConfig = None
     transduction_efficiency: float = 0.15  # target from whitepaper
@@ -66,6 +68,7 @@ class SystemConfig:
 @dataclass
 class SimulationResult:
     """Result of a digital twin simulation."""
+
     config: SystemConfig
     total_qubits: int
     total_gates: int
@@ -145,10 +148,10 @@ class ModularSimulator:
 
 # Degradation bands from whitepaper (page 9)
 DEGRADATION_BANDS = [
-    (0.25, "STRETCH",  "~5 kHz", "~500 ops/sec", "Full algorithm library"),
-    (0.15, "TARGET",   "~3 kHz", "~300 ops/sec", "Most algorithms viable"),
+    (0.25, "STRETCH", "~5 kHz", "~500 ops/sec", "Full algorithm library"),
+    (0.15, "TARGET", "~3 kHz", "~300 ops/sec", "Most algorithms viable"),
     (0.10, "FALLBACK", "~2 kHz", "~200 ops/sec", "Sparse communication"),
-    (0.05, "MINIMUM",  "~1 kHz", "~100 ops/sec", "Single-module operation"),
+    (0.05, "MINIMUM", "~1 kHz", "~100 ops/sec", "Single-module operation"),
 ]
 
 TARGET_LINK_QUALITY = 0.15
@@ -189,7 +192,9 @@ def simulate_workload(
     # We anchor the 4-module case near the historical behavior, while
     # allowing larger fabrics to pay more link pressure than smaller ones.
     if config.num_modules > 1:
-        cross_module_ratio = min(0.5, (1.0 / config.num_modules) * math.sqrt(config.num_modules / 4.0))
+        cross_module_ratio = min(
+            0.5, (1.0 / config.num_modules) * math.sqrt(config.num_modules / 4.0)
+        )
         inter_module_gates = int(two_q_gates * cross_module_ratio)
     else:
         inter_module_gates = 0
@@ -282,10 +287,7 @@ def simulate_workload(
         0.99,
         max(
             0.01,
-            effective_efficiency
-            * 2
-            * phase_stability
-            * phase_lock_duty_cycle
+            effective_efficiency * 2 * phase_stability * phase_lock_duty_cycle
             - added_noise_penalty,
         ),
     )
@@ -332,7 +334,10 @@ def simulate_workload(
         (config.bell_pair_rate_hz * parallel_links) / expected_attempts_per_bell_pair,
     )
     bandwidth_capped_rate_hz = (
-        max(1.0, (transduction_bandwidth_limit_hz * parallel_links) / expected_attempts_per_bell_pair)
+        max(
+            1.0,
+            (transduction_bandwidth_limit_hz * parallel_links) / expected_attempts_per_bell_pair,
+        )
         if transduction_bandwidth_limit_hz > 0.0
         else uncapped_effective_bell_pair_rate_hz
     )
@@ -408,19 +413,12 @@ def simulate_workload(
 
     # Runtime and decoherence proxy. The goal is a stable software-side signal
     # rather than a literal hardware-fidelity prediction.
-    total_time_us = (
-        one_qubit_runtime
-        + intra_module_two_qubit_runtime
-        + interconnect_runtime
-    )
+    total_time_us = one_qubit_runtime + intra_module_two_qubit_runtime + interconnect_runtime
     normalized_scale = max(1.0, float(config.module.qubits_per_module))
     intra_error = (
-        one_q_gates * (1.0 - f_1q)
-        + (two_q_gates - inter_module_gates) * (1.0 - f_2q)
+        one_q_gates * (1.0 - f_1q) + (two_q_gates - inter_module_gates) * (1.0 - f_2q)
     ) / normalized_scale
-    inter_error = (
-        inter_module_gates * (1.0 - inter_module_gate_fidelity)
-    ) / normalized_scale
+    inter_error = (inter_module_gates * (1.0 - inter_module_gate_fidelity)) / normalized_scale
     decoherence_penalty = total_time_us / (config.module.t1_us * normalized_scale)
 
     estimated_fidelity = math.exp(-(intra_error + inter_error + decoherence_penalty))
@@ -624,30 +622,40 @@ def run_scaling_analysis():
 
     # Scenario 1: Module scaling at target efficiency (15%)
     print("\n  SCENARIO 1: Module Scaling @ 15% transduction")
-    print(f"  {'Modules':<10} {'Qubits':<10} {'Inter-mod':<12} {'Fidelity':<12} {'Runtime(us)':<14} {'Band'}")
+    print(
+        f"  {'Modules':<10} {'Qubits':<10} {'Inter-mod':<12} {'Fidelity':<12} {'Runtime(us)':<14} {'Band'}"
+    )
     print("  " + "-" * 68)
 
     for n_modules in [1, 2, 4, 8, 16]:
         config = SystemConfig(num_modules=n_modules, transduction_efficiency=0.15)
         result = simulate_workload(config, circuit_depth=50)
-        print(f"  {n_modules:<10} {result.total_qubits:<10} {result.inter_module_gates:<12} "
-              f"{result.estimated_fidelity:<12.6f} {result.estimated_runtime_us:<14.1f} {result.degradation_band}")
+        print(
+            f"  {n_modules:<10} {result.total_qubits:<10} {result.inter_module_gates:<12} "
+            f"{result.estimated_fidelity:<12.6f} {result.estimated_runtime_us:<14.1f} {result.degradation_band}"
+        )
 
     # Scenario 2: Transduction efficiency sweep
     print("\n  SCENARIO 2: Transduction Efficiency Sweep (4 modules, 200 qubits)")
-    print(f"  {'Efficiency':<12} {'Band':<12} {'Fidelity':<12} {'Inter-latency(us)':<20} {'Bell pairs'}")
+    print(
+        f"  {'Efficiency':<12} {'Band':<12} {'Fidelity':<12} {'Inter-latency(us)':<20} {'Bell pairs'}"
+    )
     print("  " + "-" * 68)
 
     for eff in [0.05, 0.10, 0.15, 0.20, 0.25, 0.50]:
         config = SystemConfig(num_modules=4, transduction_efficiency=eff)
         result = simulate_workload(config, circuit_depth=50)
         band, _ = classify_degradation(eff)
-        print(f"  {eff:<12.0%} {band:<12} {result.estimated_fidelity:<12.6f} "
-              f"{result.inter_module_latency_us:<20.1f} {result.bell_pairs_needed}")
+        print(
+            f"  {eff:<12.0%} {band:<12} {result.estimated_fidelity:<12.6f} "
+            f"{result.inter_module_latency_us:<20.1f} {result.bell_pairs_needed}"
+        )
 
     # Scenario 3: Chemistry workload (target: FeMoco-scale)
     print("\n  SCENARIO 3: Chemistry Workload Scaling")
-    print(f"  {'Molecule':<12} {'Qubits':<10} {'Modules':<10} {'Depth':<8} {'Fidelity':<12} {'Viable?'}")
+    print(
+        f"  {'Molecule':<12} {'Qubits':<10} {'Modules':<10} {'Depth':<8} {'Fidelity':<12} {'Viable?'}"
+    )
     print("  " + "-" * 62)
 
     chemistry_targets = [
@@ -661,12 +669,17 @@ def run_scaling_analysis():
 
     for name, qubits, min_modules, depth in chemistry_targets:
         modules = max(min_modules, (qubits + 49) // 50)
-        config = SystemConfig(num_modules=modules, transduction_efficiency=0.15,
-                            module=ModuleConfig(qubits_per_module=max(50, qubits // modules)))
+        config = SystemConfig(
+            num_modules=modules,
+            transduction_efficiency=0.15,
+            module=ModuleConfig(qubits_per_module=max(50, qubits // modules)),
+        )
         result = simulate_workload(config, circuit_depth=depth)
         viable = "YES" if result.estimated_fidelity > 0.01 else "NEEDS EC"
-        print(f"  {name:<12} {qubits:<10} {modules:<10} {depth:<8} "
-              f"{result.estimated_fidelity:<12.6f} {viable}")
+        print(
+            f"  {name:<12} {qubits:<10} {modules:<10} {depth:<8} "
+            f"{result.estimated_fidelity:<12.6f} {viable}"
+        )
 
     print("\n  Note: FeMoco requires error correction (qLDPC codes)")
     print("  The whitepaper targets 100+ logical qubits by 2030")

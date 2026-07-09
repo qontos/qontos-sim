@@ -33,18 +33,14 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
 from qontos_tensor.mps import (
     MatrixProductState,
-    ghz_state_mps,
-    MAX_BOND_DIM,
 )
 from qontos_tensor.mpo import (
-    MatrixProductOperator,
-    transverse_field_ising,
     heisenberg_xxz,
     molecular_hamiltonian,
 )
@@ -56,6 +52,7 @@ logger = logging.getLogger(__name__)
 # ===================================================================
 # Gate definitions
 # ===================================================================
+
 
 def _rx(theta: float) -> np.ndarray:
     """Rotation around X axis."""
@@ -89,19 +86,25 @@ GATE_LIBRARY: Dict[str, Union[np.ndarray, Callable]] = {
     "Rx": _rx,  # parametric
     "Ry": _ry,
     "Rz": _rz,
-    "CNOT": np.array([
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 0, 1],
-        [0, 0, 1, 0],
-    ], dtype=np.complex128),
+    "CNOT": np.array(
+        [
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 1],
+            [0, 0, 1, 0],
+        ],
+        dtype=np.complex128,
+    ),
     "CZ": np.diag([1, 1, 1, -1]).astype(np.complex128),
-    "SWAP": np.array([
-        [1, 0, 0, 0],
-        [0, 0, 1, 0],
-        [0, 1, 0, 0],
-        [0, 0, 0, 1],
-    ], dtype=np.complex128),
+    "SWAP": np.array(
+        [
+            [1, 0, 0, 0],
+            [0, 0, 1, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 1],
+        ],
+        dtype=np.complex128,
+    ),
 }
 
 # Toffoli as 8x8
@@ -128,6 +131,7 @@ def resolve_gate(name: str, params: Optional[List[float]] = None) -> np.ndarray:
 # ===================================================================
 # Gate instruction dataclass
 # ===================================================================
+
 
 @dataclass
 class GateInstruction:
@@ -161,6 +165,7 @@ class GateInstruction:
 # Simulation result
 # ===================================================================
 
+
 @dataclass
 class SimulationResult:
     """
@@ -190,6 +195,7 @@ class SimulationResult:
 # ===================================================================
 # TNSimulator
 # ===================================================================
+
 
 class TNSimulator:
     """
@@ -324,7 +330,7 @@ class TNSimulator:
         gate_8 = gate.reshape(8, 8) if gate.shape != (8, 8) else gate
 
         # Reshape: (q0, q1) x (q2) = (4, 2) x (4, 2)
-        mat = gate_8.reshape(4, 2, 4, 2).transpose(0, 2, 1, 3).reshape(16, 4)
+        gate_8.reshape(4, 2, 4, 2).transpose(0, 2, 1, 3).reshape(16, 4)
 
         # For simplicity, use SWAP network to make qubits adjacent then
         # apply the gate as a sequence of two 2-qubit operations
@@ -351,9 +357,9 @@ class TNSimulator:
 
         # Now apply the 3-qubit gate by contracting into a 3-site tensor
         d = 2
-        A = mps.tensors[start]          # (d, chi_l, chi_m1)
-        B = mps.tensors[start + 1]      # (d, chi_m1, chi_m2)
-        C = mps.tensors[start + 2]      # (d, chi_m2, chi_r)
+        A = mps.tensors[start]  # (d, chi_l, chi_m1)
+        B = mps.tensors[start + 1]  # (d, chi_m1, chi_m2)
+        C = mps.tensors[start + 2]  # (d, chi_m2, chi_r)
 
         chi_l = A.shape[1]
         chi_r = C.shape[2]
@@ -613,10 +619,10 @@ class TNSimulator:
 
                 # Statevector (only for small n)
                 sv_time = None
-                sv_memory = 2 ** n * 16  # bytes
+                sv_memory = 2**n * 16  # bytes
                 if n <= 20:
                     t0 = time.time()
-                    sv = mps_result.final_state.to_statevector()
+                    mps_result.final_state.to_statevector()
                     sv_time = time.time() - t0
 
                 results[name][n] = {
@@ -658,6 +664,7 @@ class TNSimulator:
 # ===================================================================
 # ScalabilityDemo
 # ===================================================================
+
 
 class ScalabilityDemo:
     """
@@ -825,6 +832,7 @@ class ScalabilityDemo:
 # ===================================================================
 # Noise models
 # ===================================================================
+
 
 def depolarizing_channel(p: float) -> List[np.ndarray]:
     """

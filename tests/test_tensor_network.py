@@ -8,12 +8,11 @@ memory scaling, and stability labelling.
 
 from __future__ import annotations
 
-import sys
 
 import numpy as np
 import pytest
 
-from qontos_tensor.tensor_core import Tensor, TensorNetwork, contract_pair, random_tensor
+from qontos_tensor.tensor_core import Tensor, TensorNetwork, contract_pair
 from qontos_tensor.mps import MatrixProductState, ghz_state_mps
 from qontos_tensor.mpo import (
     MatrixProductOperator,
@@ -34,6 +33,7 @@ from qontos_tensor.circuit_simulator import (
 # ===================================================================
 # Tensor creation and contraction
 # ===================================================================
+
 
 class TestTensorCore:
     """Basic Tensor operations."""
@@ -87,6 +87,7 @@ class TestTensorCore:
 # MPS initialization
 # ===================================================================
 
+
 class TestMPSInit:
     """Matrix Product State creation for n-qubit states."""
 
@@ -126,6 +127,7 @@ class TestMPSInit:
 # MPS apply_gate single-qubit
 # ===================================================================
 
+
 class TestMPSSingleQubitGate:
     """Apply single-qubit gates via MPS."""
 
@@ -150,18 +152,22 @@ class TestMPSSingleQubitGate:
 # MPS apply_gate two-qubit
 # ===================================================================
 
+
 class TestMPSTwoQubitGate:
     """Apply two-qubit gates via MPS."""
 
     def test_cnot_bell_state(self):
         mps = MatrixProductState.zero_state(2)
         H = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
-        CNOT = np.array([
-            [1, 0, 0, 0],
-            [0, 1, 0, 0],
-            [0, 0, 0, 1],
-            [0, 0, 1, 0],
-        ], dtype=complex)
+        CNOT = np.array(
+            [
+                [1, 0, 0, 0],
+                [0, 1, 0, 0],
+                [0, 0, 0, 1],
+                [0, 0, 1, 0],
+            ],
+            dtype=complex,
+        )
 
         mps.apply_single_qubit_gate(H, 0)
         mps.apply_two_qubit_gate(CNOT, 0)
@@ -172,12 +178,15 @@ class TestMPSTwoQubitGate:
 
     def test_two_qubit_gate_returns_truncation_error(self):
         mps = MatrixProductState.zero_state(2)
-        CNOT = np.array([
-            [1, 0, 0, 0],
-            [0, 1, 0, 0],
-            [0, 0, 0, 1],
-            [0, 0, 1, 0],
-        ], dtype=complex)
+        CNOT = np.array(
+            [
+                [1, 0, 0, 0],
+                [0, 1, 0, 0],
+                [0, 0, 0, 1],
+                [0, 0, 1, 0],
+            ],
+            dtype=complex,
+        )
         err = mps.apply_two_qubit_gate(CNOT, 0)
         assert isinstance(err, float)
         assert err >= 0.0
@@ -186,6 +195,7 @@ class TestMPSTwoQubitGate:
 # ===================================================================
 # MPS inner product
 # ===================================================================
+
 
 class TestMPSInnerProduct:
     """MPS inner product <psi|phi>."""
@@ -213,6 +223,7 @@ class TestMPSInnerProduct:
 # ===================================================================
 # MPO construction for Heisenberg model
 # ===================================================================
+
 
 class TestMPOConstruction:
     """MPO factory functions."""
@@ -242,6 +253,7 @@ class TestMPOConstruction:
 # ===================================================================
 # DMRG ground state search
 # ===================================================================
+
 
 class TestDMRG:
     """DMRG ground state search convergence."""
@@ -274,6 +286,7 @@ class TestDMRG:
 # ===================================================================
 # TNSimulator circuit execution
 # ===================================================================
+
 
 class TestTNSimulator:
     """Circuit simulation via MPS."""
@@ -315,6 +328,7 @@ class TestTNSimulator:
 # TNSimulator results match expected for Bell state
 # ===================================================================
 
+
 class TestTNSimulatorBellAccuracy:
     """Bell state amplitudes should match exact values."""
 
@@ -333,6 +347,7 @@ class TestTNSimulatorBellAccuracy:
 # ===================================================================
 # Bond dimension truncation effect on fidelity
 # ===================================================================
+
 
 class TestBondDimensionTruncation:
     """Lower chi_max should introduce truncation error."""
@@ -366,6 +381,7 @@ class TestBondDimensionTruncation:
 # Memory usage scales with bond dimension, not qubit count
 # ===================================================================
 
+
 class TestMemoryScaling:
     """MPS memory should be O(n * chi^2), not O(2^n)."""
 
@@ -392,6 +408,7 @@ class TestMemoryScaling:
 # Stability label: experimental features
 # ===================================================================
 
+
 class TestStabilityLabel:
     """Verify that the tensor package marks experimental status."""
 
@@ -411,6 +428,7 @@ class TestStabilityLabel:
 # ===================================================================
 # Additional gate resolution tests
 # ===================================================================
+
 
 class TestGateResolution:
     """Test the gate library lookup."""

@@ -22,11 +22,9 @@ Copyright (c) 2024-2026 QONTOS Inc. All rights reserved.
 
 from __future__ import annotations
 
-import itertools
 import logging
-import time
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Set, Tuple, Union
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
@@ -53,6 +51,7 @@ def _fresh_labels(n: int, exclude: Set[str] = frozenset()) -> List[str]:
 # ===================================================================
 # Tensor
 # ===================================================================
+
 
 class Tensor:
     """
@@ -324,6 +323,7 @@ class Tensor:
 # Free-standing contraction helpers
 # ===================================================================
 
+
 def _contraction_cost(
     shape_a: Tuple[int, ...],
     indices_a: List[str],
@@ -374,9 +374,11 @@ def contract_pair(
 # TensorNetwork
 # ===================================================================
 
+
 @dataclass
 class _TNEdge:
     """An internal edge (bond) in the tensor network."""
+
     index_name: str
     tensor_ids: List[int]
     dimension: int
@@ -486,7 +488,7 @@ class TensorNetwork:
 
         # Build a working copy
         working: Dict[int, Tensor] = {i: self._tensors[i] for i in ids}
-        id_map = {k: k for k in ids}  # track merges
+        {k: k for k in ids}  # track merges
 
         total_cost = 0
         for i_pos, j_pos in order:
@@ -512,6 +514,7 @@ class TensorNetwork:
 # Optimal contraction order (greedy)
 # ===================================================================
 
+
 def _pair_cost(a: Tensor, b: Tensor) -> int:
     """FLOP cost of contracting tensors *a* and *b*."""
     return _contraction_cost(a.shape, a.indices, b.shape, b.indices)
@@ -520,8 +523,9 @@ def _pair_cost(a: Tensor, b: Tensor) -> int:
 def _pair_result_size(a: Tensor, b: Tensor) -> int:
     """Size (number of elements) of the result of contracting a with b."""
     shared = set(a.indices) & set(b.indices)
-    result_indices = [i for i in a.indices if i not in shared] + \
-                     [i for i in b.indices if i not in shared]
+    result_indices = [i for i in a.indices if i not in shared] + [
+        i for i in b.indices if i not in shared
+    ]
     dim_map = {}
     for idx, s in zip(a.indices, a.shape):
         dim_map[idx] = s
@@ -595,13 +599,9 @@ def optimal_contraction_order(
                 size = _pair_result_size(a, b)
 
                 if strategy == "greedy_flops":
-                    better = (cost < best_cost) or (
-                        cost == best_cost and size < best_size
-                    )
+                    better = (cost < best_cost) or (cost == best_cost and size < best_size)
                 else:
-                    better = (size < best_size) or (
-                        size == best_size and cost < best_cost
-                    )
+                    better = (size < best_size) or (size == best_size and cost < best_cost)
 
                 if better:
                     best_cost = cost
@@ -622,6 +622,7 @@ def optimal_contraction_order(
 # ===================================================================
 # Convenience factories
 # ===================================================================
+
 
 def random_tensor(
     shape: Tuple[int, ...],
@@ -653,6 +654,7 @@ def delta_tensor(d: int, rank: int, indices: List[str]) -> Tensor:
 # ===================================================================
 # Utility: einsum-based multi-tensor contraction
 # ===================================================================
+
 
 def multi_contract(tensors: List[Tensor], output_indices: List[str]) -> Tensor:
     """

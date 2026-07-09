@@ -37,8 +37,7 @@ Copyright (c) 2024-2026 QONTOS Inc. All rights reserved.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import List, Optional
 
 import numpy as np
 
@@ -76,9 +75,7 @@ class MatrixProductState:
     """
 
     def __init__(self, tensors: List[np.ndarray], d: int = 2) -> None:
-        self.tensors: List[np.ndarray] = [
-            np.asarray(t, dtype=np.complex128) for t in tensors
-        ]
+        self.tensors: List[np.ndarray] = [np.asarray(t, dtype=np.complex128) for t in tensors]
         self.d = d
         self._validate()
 
@@ -87,19 +84,15 @@ class MatrixProductState:
         n = len(self.tensors)
         for i, t in enumerate(self.tensors):
             if t.ndim != 3:
-                raise ValueError(
-                    f"Tensor at site {i} has rank {t.ndim}, expected 3"
-                )
+                raise ValueError(f"Tensor at site {i} has rank {t.ndim}, expected 3")
             if t.shape[0] != self.d:
-                raise ValueError(
-                    f"Physical dim at site {i} is {t.shape[0]}, expected {self.d}"
-                )
+                raise ValueError(f"Physical dim at site {i} is {t.shape[0]}, expected {self.d}")
         # Check bond compatibility
         for i in range(n - 1):
             if self.tensors[i].shape[2] != self.tensors[i + 1].shape[1]:
                 raise ValueError(
-                    f"Bond dimension mismatch between sites {i} and {i+1}: "
-                    f"{self.tensors[i].shape[2]} != {self.tensors[i+1].shape[1]}"
+                    f"Bond dimension mismatch between sites {i} and {i + 1}: "
+                    f"{self.tensors[i].shape[2]} != {self.tensors[i + 1].shape[1]}"
                 )
         # Boundary conditions
         if self.tensors[0].shape[1] != 1:
@@ -212,7 +205,7 @@ class MatrixProductState:
         MatrixProductState
         """
         psi = np.asarray(psi, dtype=np.complex128).ravel()
-        expected = d ** n
+        expected = d**n
         if psi.size != expected:
             raise ValueError(f"Statevector size {psi.size} != d^n = {expected}")
 
@@ -270,9 +263,7 @@ class MatrixProductState:
         gate = np.asarray(gate, dtype=np.complex128)
         # tensors[site] shape: (d, chi_l, chi_r)
         # new_tensor[s, l, r] = sum_s' gate[s, s'] * old[s', l, r]
-        self.tensors[site] = np.einsum(
-            "ij,jkl->ikl", gate, self.tensors[site]
-        )
+        self.tensors[site] = np.einsum("ij,jkl->ikl", gate, self.tensors[site])
 
     def apply_two_qubit_gate(
         self,
@@ -310,8 +301,8 @@ class MatrixProductState:
         if gate.shape == (d * d, d * d):
             gate = gate.reshape(d, d, d, d)
 
-        A = self.tensors[site]       # (d, chi_l, chi_m)
-        B = self.tensors[site + 1]   # (d, chi_m, chi_r)
+        A = self.tensors[site]  # (d, chi_l, chi_m)
+        B = self.tensors[site + 1]  # (d, chi_m, chi_r)
         chi_l = A.shape[1]
         chi_r = B.shape[2]
 
@@ -378,12 +369,15 @@ class MatrixProductState:
         if site_a > site_b:
             site_a, site_b = site_b, site_a
 
-        SWAP = np.array([
-            [1, 0, 0, 0],
-            [0, 0, 1, 0],
-            [0, 1, 0, 0],
-            [0, 0, 0, 1],
-        ], dtype=np.complex128)
+        SWAP = np.array(
+            [
+                [1, 0, 0, 0],
+                [0, 0, 1, 0],
+                [0, 1, 0, 0],
+                [0, 0, 0, 1],
+            ],
+            dtype=np.complex128,
+        )
 
         total_error = 0.0
 
@@ -422,9 +416,7 @@ class MatrixProductState:
             chi_new = Q.shape[1]
             self.tensors[i] = Q.reshape(d, chi_l, chi_new)
             # Absorb R into next tensor
-            self.tensors[i + 1] = np.einsum(
-                "ij,kjl->kil", R, self.tensors[i + 1]
-            )
+            self.tensors[i + 1] = np.einsum("ij,kjl->kil", R, self.tensors[i + 1])
 
     def right_canonicalize(self, start: Optional[int] = None, stop: int = 0) -> None:
         """
@@ -446,9 +438,7 @@ class MatrixProductState:
             chi_new = Q_act.shape[0]
             self.tensors[i] = Q_act.reshape(chi_new, d, chi_r).transpose(1, 0, 2)
             # Absorb L into previous tensor
-            self.tensors[i - 1] = np.einsum(
-                "ijk,kl->ijl", self.tensors[i - 1], L
-            )
+            self.tensors[i - 1] = np.einsum("ijk,kl->ijl", self.tensors[i - 1], L)
 
     def mixed_canonicalize(self, center: int) -> None:
         """
@@ -506,9 +496,7 @@ class MatrixProductState:
             S = S[:chi_new]
             Vh = Vh[:chi_new, :]
             self.tensors[i] = Vh.reshape(chi_new, d, chi_r).transpose(1, 0, 2)
-            self.tensors[i - 1] = np.einsum(
-                "ijk,kl->ijl", self.tensors[i - 1], U @ np.diag(S)
-            )
+            self.tensors[i - 1] = np.einsum("ijk,kl->ijl", self.tensors[i - 1], U @ np.diag(S))
         return total_error
 
     # ------------------------------------------------------------------
@@ -531,7 +519,7 @@ class MatrixProductState:
         T = np.ones((1, 1), dtype=np.complex128)
 
         for i in range(self.n_sites):
-            A = self.tensors[i]   # (d, chi_l_a, chi_r_a)
+            A = self.tensors[i]  # (d, chi_l_a, chi_r_a)
             B = other.tensors[i]  # (d, chi_l_b, chi_r_b)
             # T[a,b] -> sum_s conj(A[s,a,a']) * B[s,b,b'] * T[a_old, b_old]
             # = einsum('ab,sac,sbd->cd', T, conj(A), B)
@@ -613,9 +601,7 @@ class MatrixProductState:
         complex
         """
         if len(pauli_string) != self.n_sites:
-            raise ValueError(
-                f"Pauli string length {len(pauli_string)} != n_sites {self.n_sites}"
-            )
+            raise ValueError(f"Pauli string length {len(pauli_string)} != n_sites {self.n_sites}")
 
         # Transfer matrix contraction with operator insertion
         T = np.ones((1, 1), dtype=np.complex128)
@@ -654,7 +640,7 @@ class MatrixProductState:
             U, S, Vh = np.linalg.svd(mat, full_matrices=False)
 
             # Von Neumann entropy
-            s2 = S ** 2
+            s2 = S**2
             s2 = s2[s2 > 1e-20]  # avoid log(0)
             s2 /= s2.sum()
             entropy = -float(np.sum(s2 * np.log2(s2)))
@@ -690,7 +676,7 @@ class MatrixProductState:
         if self.n_sites > 25:
             raise ValueError(
                 f"to_statevector() refuses to run on {self.n_sites} sites "
-                f"(would require {self.d ** self.n_sites} amplitudes)"
+                f"(would require {self.d**self.n_sites} amplitudes)"
             )
 
         # Contract left to right
@@ -714,9 +700,7 @@ class MatrixProductState:
 
     def copy(self) -> "MatrixProductState":
         """Deep copy."""
-        return MatrixProductState(
-            [t.copy() for t in self.tensors], d=self.d
-        )
+        return MatrixProductState([t.copy() for t in self.tensors], d=self.d)
 
     # ------------------------------------------------------------------
     # String representation
@@ -745,6 +729,7 @@ class MatrixProductState:
 # ===================================================================
 # Utility: common initial states
 # ===================================================================
+
 
 def ghz_state_mps(n: int, chi_max: int = MAX_BOND_DIM) -> MatrixProductState:
     """
