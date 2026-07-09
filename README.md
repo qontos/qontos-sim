@@ -160,7 +160,12 @@ Runnable scripts live in [`examples/`](examples):
 
 ## Related repositories
 
-More of the QONTOS open-source ecosystem (examples, benchmarks, research) is being prepared and will be linked here as each repository is published.
+| Repository | Description |
+| :--- | :--- |
+| [qontosq](https://github.com/qontos/qontosq) | The QONTOS quantum SDK for the modular architecture: cross-module transpilation to Bell pairs plus feed-forward, link noise, and a QEC-aware logical layer |
+| [qontos-examples](https://github.com/qontos/qontos-examples) | Verified, CI-executed examples against the pinned public releases |
+
+More of the ecosystem (benchmarks, research) will be linked as it is published.
 
 ## License
 
