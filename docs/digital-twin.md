@@ -1,4 +1,9 @@
-# QONTOS Digital Twin
+# QONTOS Architecture Estimator
+
+> This component is an ARCHITECTURE ESTIMATOR (a planning sandbox), not a
+> measured-data-calibrated digital twin. See MODEL_CARD.md for its valid
+> operating domain. The public class is named ModularSimulator for
+> backward compatibility.
 
 ## Overview
 

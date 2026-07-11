@@ -8,7 +8,7 @@
   </a>
 
   <h3>QONTOS Simulators</h3>
-  <p><strong>Simulation, digital twin, and tensor-network modeling for the QONTOS platform.</strong></p>
+  <p><strong>Simulation, architecture estimation, and tensor-network modeling for the QONTOS platform.</strong></p>
   <p>Public validation and planning tools for the software stack today and the modular hardware roadmap ahead.</p>
 
   <p>
@@ -24,7 +24,7 @@
     <a href="#quick-start">Quick Start</a> &middot;
     <a href="docs/index.md">Docs Hub</a> &middot;
     <a href="#simulators">Simulators</a> &middot;
-    <a href="#digital-twin">Digital Twin</a> &middot;
+    <a href="#architecture-estimator">Architecture Estimator</a> &middot;
     <a href="#tensor-network-engine">Tensor Engine</a> &middot;
     <a href="#related-packages">Related Packages</a>
   </p>
@@ -34,14 +34,14 @@
 
 ## Overview
 
-QONTOS Simulators is a small, self-contained SDK for building and running quantum algorithms. The whole package depends only on NumPy: a friendly circuit builder, an exact statevector simulator, and a matrix-product-state (tensor-network) backend for larger, low-entanglement circuits. It also ships a modular-architecture digital twin for system-level planning.
+QONTOS Simulators is a small, self-contained SDK for building and running quantum algorithms. The whole package depends only on NumPy: a friendly circuit builder, an exact statevector simulator, and a matrix-product-state (tensor-network) backend for larger, low-entanglement circuits. It also ships a modular-architecture ESTIMATOR (a planning sandbox, not a measured-data-calibrated digital twin) for system-level planning; see MODEL_CARD.md for its valid domain.
 
 Start with [docs/index.md](docs/index.md) for the lightweight docs hub.
 
 It provides:
 
 1. **`qontos_sim`** — the developer SDK: a `Circuit` builder and one `simulate` call, with an exact statevector backend and a tensor-network (MPS) backend.
-2. **`qontos_twin`** — a modular-hardware digital twin for architecture and throughput studies.
+2. **`qontos_twin`** — a modular-architecture ESTIMATOR (planning sandbox) for architecture and throughput studies. Not a measured-data-calibrated digital twin; see MODEL_CARD.md.
 3. **`qontos_tensor`** — a pure NumPy tensor-network engine (MPS, MPO, DMRG) that powers the MPS backend.
 
 ## Installation
@@ -82,7 +82,7 @@ print(simulate(ghz, shots=1000, method="mps").counts)   # {'000': ~500, '111': ~
 
 Bitstring convention: position `i` is the measured value of qubit `i` (qubit 0 leftmost).
 
-### Digital Twin
+### Architecture Estimator
 
 ```python
 from qontos_twin import ModularSimulator, SystemConfig
@@ -120,11 +120,11 @@ print(result.measurements[:5])
 | :--- | :--- | :--- | :--- |
 | `simulate(c, method="statevector")` | Exact statevector (NumPy) | Up to ~25 | The default; exact, any circuit |
 | `simulate(c, method="mps")` | Tensor network (MPS) | Larger, bounded entanglement | Big low-entanglement circuits |
-| `ModularSimulator` (`qontos_twin`) | Digital twin | Unlimited (modeled) | Architecture and throughput studies |
+| `ModularSimulator` (`qontos_twin`) | Architecture estimator (planning sandbox) | Unlimited (modeled) | Architecture and throughput studies |
 
-## Digital Twin
+## Architecture Estimator
 
-The digital twin simulates workloads on modular architecture candidates. For a given system configuration, it estimates:
+The architecture estimator analyses workloads on modular architecture candidates using scenario bands and analytic proxies. It is a planning signal, not a measured-fidelity prediction (see MODEL_CARD.md). For a given system configuration it estimates:
 
 - Total gate count (intra-module and inter-module)
 - Circuit fidelity (based on gate fidelity, transduction, and decoherence)
